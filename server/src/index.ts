@@ -12,10 +12,10 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-// Model Cascade Definition
-const DEFAULT_MODEL = 'gemini-2.0-flash';
+// Model Cascade Definition (Fast & Cost-Efficient Defaults)
+const DEFAULT_MODEL = 'gemini-2.5-flash-lite';
 const ESCALATED_MODEL = 'gemini-2.5-flash';
-const EMBEDDING_MODEL = 'gemini-embedding-2';
+const EMBEDDING_MODEL = 'text-embedding-004';
 
 /**
  * Compile persona structured fields into unified server-side system prompt
@@ -87,6 +87,25 @@ async function getAuthenticatedUser(headers: Record<string, string | undefined>,
 }
 
 /**
+ * Non-blocking embedding generator with strict timeout (prevents hanging RAG calls)
+ */
+async function getEmbeddingWithTimeout(text: string, timeoutMs: number = 1000): Promise<number[] | null> {
+  try {
+    const embedPromise = ai.models.embedContent({
+      model: EMBEDDING_MODEL,
+      contents: text
+    }).then(res => (res.embedding?.values as number[]) || null);
+
+    const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs));
+
+    return await Promise.race([embedPromise, timeoutPromise]);
+  } catch (err) {
+    console.warn('[EMBEDDING TIMEOUT/ERR]', err);
+    return null;
+  }
+}
+
+/**
  * Generate Gemini response with automatic fallback model on 429 / Rate Limit
  */
 async function generateContentWithFallback(targetModel: string, contents: any[], systemInstruction: string, temperature: number) {
@@ -100,9 +119,9 @@ async function generateContentWithFallback(targetModel: string, contents: any[],
       }
     });
   } catch (err: any) {
-    if (err?.status === 429 || err?.message?.includes('429') || err?.message?.includes('quota')) {
-      const fallbackModel = targetModel === 'gemini-2.0-flash' ? 'gemini-2.5-flash' : 'gemini-2.0-flash';
-      console.warn(`[GEMINI FALLBACK] ${targetModel} hit rate limit, retrying with ${fallbackModel}...`);
+    if (err?.status === 429 || err?.message?.includes('429') || err?.message?.includes('quota') || err?.status === 404) {
+      const fallbackModel = targetModel.includes('lite') ? ESCALATED_MODEL : DEFAULT_MODEL;
+      console.warn(`[GEMINI FALLBACK] ${targetModel} issue, retrying with ${fallbackModel}...`);
       return await ai.models.generateContent({
         model: fallbackModel,
         contents,
@@ -247,28 +266,27 @@ const app = new Elysia()
 
       const { chatId, message, botId } = body;
 
-      // 1. Fetch Bot Persona & System Prompt
-      const { data: bot, error: botErr } = await supabase.from('bots').select('*').eq('id', botId).single();
-      if (botErr || !bot) throw new Error('Bot not found');
+      // 1. Parallelize initial DB reads (Bot persona, Chat state, History)
+      const [botRes, chatRes, historyRes] = await Promise.all([
+        supabase.from('bots').select('*').eq('id', botId).single(),
+        supabase.from('chats').select('relationship_score, current_mood, summary').eq('id', chatId).single(),
+        supabase.from('messages')
+          .select('sender_type, content')
+          .eq('chat_id', chatId)
+          .order('created_at', { ascending: false })
+          .limit(15)
+      ]);
 
-      // 2. Fetch Chat Session State (Relationship Score & Mood)
-      const { data: currentChat } = await supabase.from('chats').select('relationship_score, current_mood, summary').eq('id', chatId).single();
+      if (botRes.error || !botRes.data) throw new Error('Bot not found');
+      const bot = botRes.data;
+      const currentChat = chatRes.data;
       let currentScore = currentChat?.relationship_score ?? 50;
+      const rawHistory = historyRes.data || [];
+      const history = rawHistory.reverse();
 
-      // 3. Generate Embedding for User Message (RAG Memory Retrieval)
-      let userEmbedding: number[] | null = null;
-      try {
-        const embedRes = await ai.models.embedContent({
-          model: EMBEDDING_MODEL,
-          contents: message
-        });
-        userEmbedding = (embedRes.embedding?.values as number[]) || null;
-      } catch (err) {
-        console.warn('Embedding generation skipped/failed:', err);
-      }
-
-      // 4. Retrieve Vector Memories (RAG)
+      // 2. Fast Non-blocking RAG Memory Retrieval (with strict 1.0s timeout)
       let ragContext = '';
+      const userEmbedding = await getEmbeddingWithTimeout(message, 1000);
       if (userEmbedding) {
         try {
           const { data: memories } = await supabase.rpc('match_memories', {
@@ -288,35 +306,25 @@ const app = new Elysia()
         }
       }
 
-      // 5. Construct System Prompt with Dynamic Relationship State
+      // 3. Construct System Prompt with Dynamic Relationship State
       let systemPrompt = bot.system_prompt + ragContext;
-      systemPrompt += `\n\n[สถานะความสัมพันธ์ปัจจุบัน]\n- ระดับความสนิทสนม: ${currentScore}/100\n- อารมณ์ล่าสุด: ${currentChat?.current_mood || 'แจ่มใส 😊'}`;
+      systemPrompt += `\n\n[สถานะความสัมพันธ์ปัจจุบัน]\n- ระดับความสนิทสนม: ${currentScore}/100\n- อารมณ์ล่าสุด: ${currentChat?.current_mood || 'พร้อมฟังเสมอ'}`;
 
       if (currentChat?.summary) {
         systemPrompt += `\n\n[สรุปเนื้อหาบทสนทนาก่อนหน้า]\n${currentChat.summary}`;
       }
 
-      // 6. Fetch Recent Chat History (Sliding Window - Last 15 messages)
-      const { data: rawHistory } = await supabase
-        .from('messages')
-        .select('sender_type, content')
-        .eq('chat_id', chatId)
-        .order('created_at', { ascending: false })
-        .limit(15);
-
-      const history = (rawHistory || []).reverse();
-
-      // 7. Save User Message
-      await supabase.from('messages').insert({
+      // 4. Save User Message asynchronously alongside prompt prep
+      const saveUserMsgPromise = supabase.from('messages').insert({
         chat_id: chatId,
         sender_type: 'user',
         content: message
       });
 
-      // 8. Determine Model via Cascade Strategy
+      // 5. Determine Model via Cascade Strategy
       const targetModel = selectModel(message, history.length);
 
-      // 9. Construct Prompt History for Gemini
+      // 6. Construct Prompt History for Gemini
       const formattedHistory = history.map((m) => ({
         role: m.sender_type === 'user' ? 'user' : 'model',
         parts: [{ text: m.content }]
@@ -327,48 +335,65 @@ const app = new Elysia()
         { role: 'user', parts: [{ text: message }] }
       ];
 
-      // 10. Call Gemini API with Fallback
-      const response = await generateContentWithFallback(targetModel, contents, systemPrompt, bot.temperature || 0.7);
+      // 7. Call Gemini API & ensure user message save finishes
+      const [_, response] = await Promise.all([
+        saveUserMsgPromise,
+        generateContentWithFallback(targetModel, contents, systemPrompt, bot.temperature || 0.7)
+      ]);
+      
       const fullOutput = response.text || '';
 
-      // 11. Robust Extraction of Hidden inner_thought, Mood, Affection Delta & Visible Reply
+      // 8. Robust Extraction of Hidden inner_thought, Mood, Affection Delta & Visible Reply
       let innerThought = '';
-      let extractedMood = currentChat?.current_mood || 'แจ่มใส 😊';
+      let extractedMood = currentChat?.current_mood || 'พร้อมฟังเสมอ';
       let affectionDelta = 0;
       let visibleReply = fullOutput;
 
-      // Extract inner_thought robustly (handles open/closed tags)
       const thoughtMatch = fullOutput.match(/<inner_thought>([\s\S]*?)(?:<\/inner_thought>|$)/i);
       if (thoughtMatch) {
-        innerThought = thoughtMatch[1].trim();
+        const rawThought = thoughtMatch[1];
 
         // Extract Mood tag
-        const moodMatch = innerThought.match(/<mood>([\s\S]*?)(?:<\/mood>|$)/i);
+        const moodMatch = rawThought.match(/<mood>([\s\S]*?)(?:<\/mood>|$)/i);
         if (moodMatch) {
           extractedMood = moodMatch[1].trim();
         }
 
         // Extract Affection Delta tag
-        const deltaMatch = innerThought.match(/<affection_delta>([+-]?\d+)(?:<\/affection_delta>|$)/i);
+        const deltaMatch = rawThought.match(/<affection_delta>([+-]?\d+)(?:<\/affection_delta>|$)/i);
         if (deltaMatch) {
-          affectionDelta = parseInt(deltaMatch[1], 10);
+          const parsed = parseInt(deltaMatch[1], 10);
+          if (!isNaN(parsed)) affectionDelta = parsed;
         }
 
         // Clean internal tags out of innerThought display
-        innerThought = innerThought
+        innerThought = rawThought
           .replace(/<mood>[\s\S]*?(?:<\/mood>|$)/gi, '')
           .replace(/<affection_delta>[\s\S]*?(?:<\/affection_delta>|$)/gi, '')
           .trim();
+
+        // Extract visible reply cleanly
+        if (fullOutput.includes('</inner_thought>')) {
+          visibleReply = fullOutput.replace(/<inner_thought>[\s\S]*?<\/inner_thought>/gi, '').trim();
+        } else {
+          // If unclosed <inner_thought>, strip everything inside <inner_thought> tag
+          visibleReply = fullOutput.replace(/<inner_thought>[\s\S]*/gi, '').trim();
+          if (!visibleReply && rawThought) {
+            const lines = rawThought.split('\n').filter(l => !l.includes('<mood>') && !l.includes('<affection_delta>'));
+            if (lines.length > 0) {
+              visibleReply = lines.slice(-1).join('\n').trim();
+            }
+          }
+        }
       }
 
-      // Robustly strip all XML tags out of visibleReply so raw tags never leak to user UI!
-      visibleReply = fullOutput
-        .replace(/<inner_thought>[\s\S]*?(?:<\/inner_thought>|$)/gi, '')
-        .replace(/<mood>[\s\S]*?(?:<\/mood>|$)/gi, '')
-        .replace(/<affection_delta>[\s\S]*?(?:<\/affection_delta>|$)/gi, '')
+      // Clean leftover XML tags from visibleReply
+      visibleReply = visibleReply
+        .replace(/<\/?inner_thought>/gi, '')
+        .replace(/<\/?mood>/gi, '')
+        .replace(/<\/?affection_delta>/gi, '')
         .trim();
 
-      // Fallback if visibleReply became empty after stripping
       if (!visibleReply) {
         visibleReply = 'สวัสดีค่ะ! ยินดีที่ได้คุยกันนะคะ~ ✨';
       }
@@ -376,29 +401,26 @@ const app = new Elysia()
       // Calculate New Relationship Score (Clamped 0 to 100)
       const newScore = Math.min(100, Math.max(0, currentScore + affectionDelta));
 
-      // 12. Update Chat Session State in Supabase
-      await supabase.from('chats').update({
-        relationship_score: newScore,
-        current_mood: extractedMood,
-        updated_at: new Date().toISOString()
-      }).eq('id', chatId);
-
-      // 13. Save Bot Message to Database
-      const { data: savedMsg, error: msgErr } = await supabase
-        .from('messages')
-        .insert({
+      // 9. Save Bot Message & Update Chat Session State in parallel
+      const [updateChatRes, saveBotMsgRes] = await Promise.all([
+        supabase.from('chats').update({
+          relationship_score: newScore,
+          current_mood: extractedMood,
+          updated_at: new Date().toISOString()
+        }).eq('id', chatId),
+        supabase.from('messages').insert({
           chat_id: chatId,
           sender_type: 'bot',
           content: visibleReply,
           inner_thought: innerThought,
           model_used: targetModel
-        })
-        .select()
-        .single();
+        }).select().single()
+      ]);
 
-      if (msgErr) throw new Error(msgErr.message);
+      if (saveBotMsgRes.error) throw new Error(saveBotMsgRes.error.message);
+      const savedMsg = saveBotMsgRes.data;
 
-      // 14. Asynchronous Long-term Fact Memory Save
+      // 10. Asynchronous Long-term Fact Memory Save (Non-blocking background)
       (async () => {
         try {
           const factPrompt = `วิเคราะห์ข้อความต่อไปนี้ของผู้ใช้ว่ามีข้อเท็จจริงระยะยาวที่สำคัญเกี่ยวกับผู้ใช้หรือไม่ (เช่น ชื่อ, งานอดิเรก, สิ่งที่ชอบ/ไม่ชอบ, ประวัติส่วนตัว, เหตุการณ์สำคัญ):\nข้อความผู้ใช้: "${message}"\n\nหากมีข้อเท็จจริงสำคัญ ให้สรุปเป็นประโยคสั้นๆ 1 ประโยค หากไม่มี ให้ตอบเพียง "NONE"`;
@@ -407,17 +429,13 @@ const app = new Elysia()
           const extractedFact = factRes.text?.trim() || '';
 
           if (extractedFact && !extractedFact.toUpperCase().includes('NONE') && extractedFact.length > 5) {
-            const factEmbedRes = await ai.models.embedContent({
-              model: EMBEDDING_MODEL,
-              contents: extractedFact
-            });
-
-            if (factEmbedRes.embedding?.values) {
+            const factEmbed = await getEmbeddingWithTimeout(extractedFact, 2000);
+            if (factEmbed) {
               await supabase.from('memories').insert({
                 bot_id: botId,
                 user_id: activeUser.id,
                 content: extractedFact,
-                embedding: factEmbedRes.embedding.values,
+                embedding: factEmbed,
                 fact_category: 'user_fact'
               });
             }

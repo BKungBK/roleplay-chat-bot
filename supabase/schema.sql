@@ -32,6 +32,8 @@ CREATE TABLE IF NOT EXISTS public.chats (
     user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
     bot_id UUID REFERENCES public.bots(id) ON DELETE CASCADE NOT NULL,
     title TEXT DEFAULT 'บทสนทนาใหม่' NOT NULL,
+    relationship_score INT DEFAULT 50 NOT NULL,
+    current_mood TEXT DEFAULT 'พร้อมฟังเสมอ' NOT NULL,
     summary TEXT,                      -- Current rolling summary of recent turns
     created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
     updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL

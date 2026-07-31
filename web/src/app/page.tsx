@@ -97,7 +97,7 @@ export default function MobileChatPage() {
   ]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [modelUsed, setModelUsed] = useState<string>('gemini-2.0-flash');
+  const [modelUsed, setModelUsed] = useState<string>('gemini-2.5-flash-lite');
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   // 1. Initialize Supabase Auth Session
@@ -108,7 +108,7 @@ export default function MobileChatPage() {
         setAuthToken(session.access_token);
       } else {
         const { data: authRes } = await supabase.auth.signInAnonymously();
-        if (authRes.session) {
+        if (authRes?.session) {
           setAuthToken(authRes.session.access_token);
         }
       }
@@ -186,7 +186,7 @@ export default function MobileChatPage() {
       chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, 100);
     return () => clearTimeout(timer);
-  }, [messages.length, isLoading]);
+  }, [messages.length, isLoading, isMounted]);
 
   // Helper to ensure chat session exists before sending
   const getOrCreateChatId = async (): Promise<string | null> => {
@@ -326,6 +326,17 @@ export default function MobileChatPage() {
   };
 
   const rank = getRelationshipRank(relationshipScore);
+
+  if (!isMounted) {
+    return (
+      <div className="page-shell bg-[#FBEFD9] flex items-center justify-center min-h-screen font-['Mali'] text-[#2A4750]">
+        <div className="flex items-center space-x-2 text-base font-bold animate-pulse">
+          <span>🐚</span>
+          <span>กำลังโหลด Ocean Chat...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="page-shell">
@@ -473,7 +484,7 @@ export default function MobileChatPage() {
                   {msg.content}
                 </div>
                 <div className="msg-time" suppressHydrationWarning>
-                  {isMounted ? formatThaiTime(msg.created_at) : formatThaiTime(msg.created_at)}
+                  {formatThaiTime(msg.created_at)}
                 </div>
               </div>
             ))}
@@ -540,7 +551,7 @@ export default function MobileChatPage() {
             <form onSubmit={handleCreateCustomBot} className="flex-1 overflow-y-auto p-5 space-y-4 text-xs text-[#2A4750]">
               {/* Avatar Selector */}
               <div>
-                <label className="block font-['Mali'] font-bold text-sm text-[#2A4750] mb-1.5">ไอคอนตัวละคร (Avatar)</label>
+                <label className="block font-[#Mali] font-bold text-sm text-[#2A4750] mb-1.5">ไอคอนตัวละคร (Avatar)</label>
                 <div className="flex flex-wrap gap-2 mb-2">
                   {AVATAR_PRESETS.map((emoji) => (
                     <button
