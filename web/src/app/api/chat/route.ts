@@ -4,9 +4,11 @@ import {
   generateContentWithFallback,
   getAuthenticatedUser,
   getEmbeddingWithTimeout,
-  selectModel,
-  supabaseAdmin
+  getSupabaseAdmin,
+  selectModel
 } from '@/lib/server-utils';
+
+export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
   try {
@@ -22,11 +24,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'chatId, botId and message are required' }, { status: 400 });
     }
 
+    const supabase = getSupabaseAdmin();
+
     // 1. Parallelize initial DB reads (Bot persona, Chat state, History)
     const [botRes, chatRes, historyRes] = await Promise.all([
-      supabaseAdmin.from('bots').select('*').eq('id', botId).single(),
-      supabaseAdmin.from('chats').select('relationship_score, current_mood, summary').eq('id', chatId).single(),
-      supabaseAdmin.from('messages')
+      supabase.from('bots').select('*').eq('id', botId).single(),
+      supabase.from('chats').select('relationship_score, current_mood, summary').eq('id', chatId).single(),
+      supabase.from('messages')
         .select('sender_type, content')
         .eq('chat_id', chatId)
         .order('created_at', { ascending: false })
@@ -48,7 +52,7 @@ export async function POST(req: NextRequest) {
     const userEmbedding = await getEmbeddingWithTimeout(message, 1000);
     if (userEmbedding) {
       try {
-        const { data: memories } = await supabaseAdmin.rpc('match_memories', {
+        const { data: memories } = await supabase.rpc('match_memories', {
           query_embedding: userEmbedding,
           match_threshold: 0.75,
           match_count: 5,
@@ -74,7 +78,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 4. Save User Message asynchronously alongside prompt prep
-    const saveUserMsgPromise = supabaseAdmin.from('messages').insert({
+    const saveUserMsgPromise = supabase.from('messages').insert({
       chat_id: chatId,
       sender_type: 'user',
       content: message
@@ -162,12 +166,12 @@ export async function POST(req: NextRequest) {
 
     // 9. Save Bot Message & Update Chat Session State in parallel
     const [updateChatRes, saveBotMsgRes] = await Promise.all([
-      supabaseAdmin.from('chats').update({
+      supabase.from('chats').update({
         relationship_score: newScore,
         current_mood: extractedMood,
         updated_at: new Date().toISOString()
       }).eq('id', chatId),
-      supabaseAdmin.from('messages').insert({
+      supabase.from('messages').insert({
         chat_id: chatId,
         sender_type: 'bot',
         content: visibleReply,
@@ -192,7 +196,7 @@ export async function POST(req: NextRequest) {
         if (extractedFact && !extractedFact.toUpperCase().includes('NONE') && extractedFact.length > 5) {
           const factEmbed = await getEmbeddingWithTimeout(extractedFact, 2000);
           if (factEmbed) {
-            await supabaseAdmin.from('memories').insert({
+            await supabase.from('memories').insert({
               bot_id: botId,
               user_id: activeUser.id,
               content: extractedFact,

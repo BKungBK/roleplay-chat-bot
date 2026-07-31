@@ -1,15 +1,17 @@
 import { GoogleGenAI } from '@google/genai';
 import { createClient } from '@supabase/supabase-js';
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 
-// Environment variables
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+export function getAi() {
+  const apiKey = process.env.GEMINI_API_KEY || '';
+  return new GoogleGenAI({ apiKey: apiKey || 'dummy_key' });
+}
 
-// Initialize Clients
-export const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
-export const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+export function getSupabaseAdmin() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || 'https://placeholder.supabase.co';
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'dummy_key';
+  return createClient(url, key);
+}
 
 // Model Cascade Definition
 export const DEFAULT_MODEL = 'gemini-3.5-flash-lite';
@@ -76,7 +78,8 @@ export async function getAuthenticatedUser(req: NextRequest) {
   }
 
   const token = authHeader.substring(7).trim();
-  const { data, error } = await supabaseAdmin.auth.getUser(token);
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase.auth.getUser(token);
   if (error || !data?.user) {
     return null;
   }
@@ -88,6 +91,7 @@ export async function getAuthenticatedUser(req: NextRequest) {
  */
 export async function getEmbeddingWithTimeout(text: string, timeoutMs: number = 1000): Promise<number[] | null> {
   try {
+    const ai = getAi();
     const embedPromise = ai.models.embedContent({
       model: EMBEDDING_MODEL,
       contents: text
@@ -109,6 +113,7 @@ export async function getEmbeddingWithTimeout(text: string, timeoutMs: number = 
  * Generate Gemini response with automatic fallback model
  */
 export async function generateContentWithFallback(targetModel: string, contents: any[], systemInstruction: string, temperature: number) {
+  const ai = getAi();
   try {
     return await ai.models.generateContent({
       model: targetModel,

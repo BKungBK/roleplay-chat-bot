@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { compileSystemPrompt, getAuthenticatedUser, supabaseAdmin } from '@/lib/server-utils';
+import { compileSystemPrompt, getAuthenticatedUser, getSupabaseAdmin } from '@/lib/server-utils';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    const { data, error } = await supabaseAdmin
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
       .from('bots')
       .select('*')
       .order('created_at', { ascending: false });
@@ -32,8 +35,9 @@ export async function POST(req: NextRequest) {
     }
 
     const compiledPrompt = compileSystemPrompt({ name, personality, speech_style, likes_dislikes, boundaries });
+    const supabase = getSupabaseAdmin();
 
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await supabase
       .from('bots')
       .insert({
         user_id: activeUser.id,

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuthenticatedUser, supabaseAdmin } from '@/lib/server-utils';
+import { getAuthenticatedUser, getSupabaseAdmin } from '@/lib/server-utils';
+
+export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
   try {
@@ -15,7 +17,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'botId is required' }, { status: 400 });
     }
 
-    const { data: chat, error } = await supabaseAdmin
+    const supabase = getSupabaseAdmin();
+    const { data: chat, error } = await supabase
       .from('chats')
       .insert({
         user_id: activeUser.id,

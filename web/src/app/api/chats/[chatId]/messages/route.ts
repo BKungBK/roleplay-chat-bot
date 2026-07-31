@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuthenticatedUser, supabaseAdmin } from '@/lib/server-utils';
+import { getAuthenticatedUser, getSupabaseAdmin } from '@/lib/server-utils';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ chatId: string }> }) {
   try {
@@ -9,8 +11,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ chat
     }
 
     const { chatId } = await params;
+    const supabase = getSupabaseAdmin();
 
-    const { data: messages, error } = await supabaseAdmin
+    const { data: messages, error } = await supabase
       .from('messages')
       .select('id, sender_type, content, inner_thought, created_at')
       .eq('chat_id', chatId)
