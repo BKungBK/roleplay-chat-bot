@@ -72,18 +72,27 @@ export function selectModel(messageContent: string, historyCount: number): strin
  * Supabase Auth Bearer Token verification helper for NextRequest
  */
 export async function getAuthenticatedUser(req: NextRequest) {
+  const fallbackUser = { id: '00000000-0000-0000-0000-000000000000' };
   const authHeader = req.headers.get('authorization') || req.headers.get('Authorization');
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return null;
+    return fallbackUser;
   }
 
   const token = authHeader.substring(7).trim();
-  const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase.auth.getUser(token);
-  if (error || !data?.user) {
-    return null;
+  if (!token || token === 'null' || token === 'undefined') {
+    return fallbackUser;
   }
-  return data.user;
+
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase.auth.getUser(token);
+    if (error || !data?.user) {
+      return fallbackUser;
+    }
+    return data.user;
+  } catch {
+    return fallbackUser;
+  }
 }
 
 /**

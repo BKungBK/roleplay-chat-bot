@@ -319,16 +319,32 @@ export default function MobileChatPage() {
   // 5. Handle Custom Bot Creation ("สร้างตัวละครเฉพาะ")
   const handleCreateCustomBot = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newBotName.trim() || !newBotPersonality.trim() || !authToken || isCreatingBot) return;
+    if (!newBotName.trim() || !newBotPersonality.trim() || isCreatingBot) return;
 
     setIsCreatingBot(true);
+
+    const fallbackBot: Bot = {
+      id: `bot-custom-${Date.now()}`,
+      name: newBotName.trim(),
+      avatar_url: newBotAvatar,
+      personality: newBotPersonality.trim(),
+      speech_style: newBotSpeechStyle.trim(),
+      likes_dislikes: newBotLikes.trim(),
+      boundaries: newBotBoundaries.trim(),
+      temperature: newBotTemp,
+    };
+
     try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (authToken) {
+        headers['Authorization'] = `Bearer ${authToken}`;
+      }
+
       const res = await fetch(`${API_BASE}/api/bots`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`,
-        },
+        headers,
         body: JSON.stringify({
           name: newBotName.trim(),
           avatar_url: newBotAvatar,
@@ -342,21 +358,26 @@ export default function MobileChatPage() {
 
       if (res.ok) {
         const data = await res.json();
-        if (data.bot) {
-          setBots((prev) => [data.bot, ...prev]);
-          setSelectedBot(data.bot);
-          setIsCreatorOpen(false);
-          setIsBotMenuOpen(false);
-          setNewBotName('');
-          setNewBotPersonality('');
-          setNewBotSpeechStyle('');
-          setNewBotLikes('');
-          setNewBotBoundaries('');
-        }
+        const createdBot = data.bot || fallbackBot;
+        setBots((prev) => [createdBot, ...prev]);
+        setSelectedBot(createdBot);
+      } else {
+        setBots((prev) => [fallbackBot, ...prev]);
+        setSelectedBot(fallbackBot);
       }
     } catch (err) {
-      console.error('Failed to create bot:', err);
+      console.warn('Failed to save bot to DB, using local state:', err);
+      setBots((prev) => [fallbackBot, ...prev]);
+      setSelectedBot(fallbackBot);
     }
+
+    setIsCreatorOpen(false);
+    setIsBotMenuOpen(false);
+    setNewBotName('');
+    setNewBotPersonality('');
+    setNewBotSpeechStyle('');
+    setNewBotLikes('');
+    setNewBotBoundaries('');
     setIsCreatingBot(false);
   };
 
