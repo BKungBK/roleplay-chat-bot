@@ -331,30 +331,46 @@ const app = new Elysia()
       const response = await generateContentWithFallback(targetModel, contents, systemPrompt, bot.temperature || 0.7);
       const fullOutput = response.text || '';
 
-      // 11. Extract Hidden inner_thought, Mood, Affection Delta & Visible Reply
+      // 11. Robust Extraction of Hidden inner_thought, Mood, Affection Delta & Visible Reply
       let innerThought = '';
       let extractedMood = currentChat?.current_mood || 'แจ่มใส 😊';
       let affectionDelta = 0;
       let visibleReply = fullOutput;
 
-      const thoughtMatch = fullOutput.match(/<inner_thought>([\s\S]*?)<\/inner_thought>/);
+      // Extract inner_thought robustly (handles open/closed tags)
+      const thoughtMatch = fullOutput.match(/<inner_thought>([\s\S]*?)(?:<\/inner_thought>|$)/i);
       if (thoughtMatch) {
         innerThought = thoughtMatch[1].trim();
 
-        // Extract Mood
-        const moodMatch = innerThought.match(/<mood>([\s\S]*?)<\/mood>/);
+        // Extract Mood tag
+        const moodMatch = innerThought.match(/<mood>([\s\S]*?)(?:<\/mood>|$)/i);
         if (moodMatch) {
           extractedMood = moodMatch[1].trim();
         }
 
-        // Extract Affection Delta
-        const deltaMatch = innerThought.match(/<affection_delta>([+-]?\d+)<\/affection_delta>/);
+        // Extract Affection Delta tag
+        const deltaMatch = innerThought.match(/<affection_delta>([+-]?\d+)(?:<\/affection_delta>|$)/i);
         if (deltaMatch) {
           affectionDelta = parseInt(deltaMatch[1], 10);
         }
 
-        // Clean visible reply
-        visibleReply = fullOutput.replace(/<inner_thought>[\s\S]*?<\/inner_thought>/, '').trim();
+        // Clean internal tags out of innerThought display
+        innerThought = innerThought
+          .replace(/<mood>[\s\S]*?(?:<\/mood>|$)/gi, '')
+          .replace(/<affection_delta>[\s\S]*?(?:<\/affection_delta>|$)/gi, '')
+          .trim();
+      }
+
+      // Robustly strip all XML tags out of visibleReply so raw tags never leak to user UI!
+      visibleReply = fullOutput
+        .replace(/<inner_thought>[\s\S]*?(?:<\/inner_thought>|$)/gi, '')
+        .replace(/<mood>[\s\S]*?(?:<\/mood>|$)/gi, '')
+        .replace(/<affection_delta>[\s\S]*?(?:<\/affection_delta>|$)/gi, '')
+        .trim();
+
+      // Fallback if visibleReply became empty after stripping
+      if (!visibleReply) {
+        visibleReply = 'สวัสดีค่ะ! ยินดีที่ได้คุยกันนะคะ~ ✨';
       }
 
       // Calculate New Relationship Score (Clamped 0 to 100)

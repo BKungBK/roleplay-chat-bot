@@ -202,16 +202,16 @@ export default function MobileChatPage() {
         setModelUsed(data.model_used);
       }
     } catch {
-      setTimeout(() => {
-        const botReply: Message = {
-          id: `bot-${Date.now()}`,
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `err-${Date.now()}`,
           sender_type: 'bot',
-          content: `รับฟังอยู่นะคะ ✨ (${userText}) ชอบเวลาได้คุยแลกเปลี่ยนความคิดเห็นกันแบบนี้จังเลยค่ะ 🌊`,
+          content: '⚠️ ไม่สามารถเชื่อมต่อกับ Elysia Backend Server (http://localhost:3001) ได้ โปรดตรวจสอบว่ารัน `npm run dev` ในโฟลเดอร์หลักแล้วหรือยังนะครับ',
           created_at: new Date().toISOString(),
-        };
-        setMessages((prev) => [...prev, botReply]);
-        setIsLoading(false);
-      }, 900);
+        },
+      ]);
+      setIsLoading(false);
       return;
     }
 
@@ -248,7 +248,6 @@ export default function MobileChatPage() {
           setBots((prev) => [data.bot, ...prev]);
           setSelectedBot(data.bot);
           setIsCreatorOpen(false);
-          // Reset form
           setNewBotName('');
           setNewBotPersonality('');
           setNewBotSpeechStyle('');
