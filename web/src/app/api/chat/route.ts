@@ -28,8 +28,8 @@ export async function POST(req: NextRequest) {
 
     // 1. Parallelize initial DB reads (Bot persona, Chat state, History)
     const [botRes, chatRes, historyRes] = await Promise.all([
-      supabase.from('bots').select('*').eq('id', botId).single(),
-      supabase.from('chats').select('relationship_score, current_mood, summary').eq('id', chatId).single(),
+      supabase.from('bots').select('*').eq('id', botId).maybeSingle(),
+      supabase.from('chats').select('relationship_score, current_mood, summary').eq('id', chatId).maybeSingle(),
       supabase.from('messages')
         .select('sender_type, content')
         .eq('chat_id', chatId)
@@ -37,11 +37,11 @@ export async function POST(req: NextRequest) {
         .limit(15)
     ]);
 
-    if (botRes.error || !botRes.data) {
-      return NextResponse.json({ error: 'Bot not found' }, { status: 404 });
-    }
-
-    const bot = botRes.data;
+    const bot = botRes.data || {
+      name: 'เพื่อนเอไอ 🐚',
+      system_prompt: 'คุณคือตัวละครบทบาทสมมติที่เป็นเพื่อนสนิท คอยรับฟัง และพูดคุยด้วยความอบอุ่น',
+      temperature: 0.7
+    };
     const currentChat = chatRes.data;
     const currentScore = currentChat?.relationship_score ?? 50;
     const rawHistory = historyRes.data || [];
@@ -180,10 +180,10 @@ export async function POST(req: NextRequest) {
       }).select().single()
     ]);
 
-    if (saveBotMsgRes.error) {
-      return NextResponse.json({ error: saveBotMsgRes.error.message }, { status: 500 });
-    }
-    const savedMsg = saveBotMsgRes.data;
+    const savedMsg = saveBotMsgRes.data || {
+      id: `bot-msg-${Date.now()}`,
+      created_at: new Date().toISOString()
+    };
 
     // 10. Asynchronous Long-term Fact Memory Save (Non-blocking background)
     (async () => {

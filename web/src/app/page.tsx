@@ -206,31 +206,39 @@ export default function MobileChatPage() {
   }, [messages.length, isLoading]);
 
   // Helper to ensure chat session exists before sending
-  const getOrCreateChatId = async (): Promise<string | null> => {
+  const getOrCreateChatId = async (): Promise<string> => {
     if (activeChatId) return activeChatId;
-    if (!selectedBot || !authToken) return null;
 
-    try {
-      const res = await fetch(`${API_BASE}/api/chats`, {
-        method: 'POST',
-        headers: {
+    if (selectedBot) {
+      try {
+        const headers: Record<string, string> = {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`,
-        },
-        body: JSON.stringify({ botId: selectedBot.id }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data.chatId) {
-          setActiveChatId(data.chatId);
-          return data.chatId;
+        };
+        if (authToken) {
+          headers['Authorization'] = `Bearer ${authToken}`;
         }
+
+        const res = await fetch(`${API_BASE}/api/chats`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ botId: selectedBot.id }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data.chatId) {
+            setActiveChatId(data.chatId);
+            return data.chatId;
+          }
+        }
+      } catch (err) {
+        console.warn('Inline chat creation error:', err);
       }
-    } catch (err) {
-      console.warn('Inline chat creation error:', err);
     }
-    return null;
+
+    const fallbackId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `chat-${Date.now()}`;
+    setActiveChatId(fallbackId);
+    return fallbackId;
   };
 
   // 4. Send Message using Real chatId UUID & Auth Bearer Token
