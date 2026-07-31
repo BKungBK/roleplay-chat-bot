@@ -13,9 +13,9 @@ const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 // Model Cascade Definition (Fast & Cost-Efficient Defaults)
-const DEFAULT_MODEL = 'gemini-2.5-flash-lite';
-const ESCALATED_MODEL = 'gemini-2.5-flash';
-const EMBEDDING_MODEL = 'text-embedding-004';
+const DEFAULT_MODEL = 'gemini-3.5-flash-lite';
+const ESCALATED_MODEL = 'gemini-3.6-flash';
+const EMBEDDING_MODEL = 'gemini-embedding-001';
 
 /**
  * Compile persona structured fields into unified server-side system prompt
@@ -119,19 +119,17 @@ async function generateContentWithFallback(targetModel: string, contents: any[],
       }
     });
   } catch (err: any) {
-    if (err?.status === 429 || err?.message?.includes('429') || err?.message?.includes('quota') || err?.status === 404) {
-      const fallbackModel = targetModel.includes('lite') ? ESCALATED_MODEL : DEFAULT_MODEL;
-      console.warn(`[GEMINI FALLBACK] ${targetModel} issue, retrying with ${fallbackModel}...`);
-      return await ai.models.generateContent({
-        model: fallbackModel,
-        contents,
-        config: {
-          systemInstruction,
-          temperature
-        }
-      });
-    }
-    throw err;
+    console.warn(`[GEMINI ERROR on ${targetModel}]:`, err?.message || err);
+    const fallbackModel = targetModel === DEFAULT_MODEL ? ESCALATED_MODEL : 'gemini-flash-lite-latest';
+    console.warn(`[GEMINI FALLBACK] retrying with ${fallbackModel}...`);
+    return await ai.models.generateContent({
+      model: fallbackModel,
+      contents,
+      config: {
+        systemInstruction,
+        temperature
+      }
+    });
   }
 }
 
@@ -387,11 +385,12 @@ const app = new Elysia()
         }
       }
 
-      // Clean leftover XML tags from visibleReply
+      // Clean leftover XML tags and control characters from visibleReply
       visibleReply = visibleReply
         .replace(/<\/?inner_thought>/gi, '')
         .replace(/<\/?mood>/gi, '')
         .replace(/<\/?affection_delta>/gi, '')
+        .replace(/[\u200B-\u200D\uFEFF]/g, '')
         .trim();
 
       if (!visibleReply) {
@@ -470,6 +469,6 @@ const app = new Elysia()
       })
     }
   )
-  .listen(3001);
+  .listen({ port: 3001, hostname: '0.0.0.0' });
 
 console.log(`🌸 Elysia Roleplay Chat Server is running at http://${app.server?.hostname}:${app.server?.port}`);

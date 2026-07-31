@@ -25,16 +25,43 @@ interface Bot {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
-const AVATAR_PRESETS = [
-  '🦭', '🐬', '🪼', '💖', '🌸', '✨', '🦊', '🐱', '☕', '🎨'
+const SVG_AVATAR_PRESETS = [
+  { label: 'พะยูน', url: 'https://api.dicebear.com/7.x/fun-emoji/svg?seed=Seal&backgroundColor=b6e3f4' },
+  { label: 'โลมา', url: 'https://api.dicebear.com/7.x/fun-emoji/svg?seed=Dolphin&backgroundColor=c0aede' },
+  { label: 'แมงกะพรุน', url: 'https://api.dicebear.com/7.x/fun-emoji/svg?seed=Jellyfish&backgroundColor=d1d4f9' },
+  { label: 'จิ้งจอก', url: 'https://api.dicebear.com/7.x/fun-emoji/svg?seed=Fox&backgroundColor=ffd5dc' },
+  { label: 'แมว', url: 'https://api.dicebear.com/7.x/fun-emoji/svg?seed=Cat&backgroundColor=ffdfbf' },
+  { label: 'ดาว', url: 'https://api.dicebear.com/7.x/fun-emoji/svg?seed=Sparkles&backgroundColor=b6e3f4' },
+  { label: 'กาแฟ', url: 'https://api.dicebear.com/7.x/fun-emoji/svg?seed=Coffee&backgroundColor=ffd5dc' },
+  { label: 'อาร์ต', url: 'https://api.dicebear.com/7.x/fun-emoji/svg?seed=Art&backgroundColor=d1d4f9' },
+  { label: 'หมี', url: 'https://api.dicebear.com/7.x/bottts/svg?seed=Teddy&backgroundColor=ffdfbf' },
+  { label: 'หุ่นยนต์', url: 'https://api.dicebear.com/7.x/bottts/svg?seed=Robot&backgroundColor=b6e3f4' }
 ];
 
 const FALLBACK_BOT: Bot = {
   id: 'bbedc638-844b-4af3-87ef-24290fcfa735',
   name: 'น้องพะยูน 🌊',
-  avatar_url: '🦭',
+  avatar_url: 'https://api.dicebear.com/7.x/fun-emoji/svg?seed=Seal&backgroundColor=b6e3f4',
   personality: 'เพื่อนสนิทที่คอยฟังและให้กำลังใจอย่างนุ่มนวล ชอบฟังเรื่องราวทะเลยามเช้า',
 };
+
+function AvatarIcon({ url, name, className = "w-full h-full object-cover rounded-full" }: { url?: string; name?: string; className?: string }) {
+  const fallback = `https://api.dicebear.com/7.x/fun-emoji/svg?seed=${encodeURIComponent(name || 'Bot')}&backgroundColor=b6e3f4`;
+  const isUrl = url && (url.startsWith('http') || url.startsWith('data:') || url.includes('/') || url.endsWith('.svg'));
+  const src = isUrl ? url : fallback;
+
+  return (
+    <img
+      src={src}
+      alt={name || 'Avatar'}
+      className={className}
+      loading="lazy"
+      onError={(e) => {
+        (e.currentTarget as HTMLImageElement).src = fallback;
+      }}
+    />
+  );
+}
 
 function formatThaiTime(dateStr?: string): string {
   if (!dateStr) return '';
@@ -74,7 +101,7 @@ export default function MobileChatPage() {
 
   // Creator Form State
   const [newBotName, setNewBotName] = useState('');
-  const [newBotAvatar, setNewBotAvatar] = useState('🦭');
+  const [newBotAvatar, setNewBotAvatar] = useState(SVG_AVATAR_PRESETS[0].url);
   const [newBotPersonality, setNewBotPersonality] = useState('');
   const [newBotSpeechStyle, setNewBotSpeechStyle] = useState('');
   const [newBotLikes, setNewBotLikes] = useState('');
@@ -92,7 +119,7 @@ export default function MobileChatPage() {
   ]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [modelUsed, setModelUsed] = useState<string>('gemini-2.5-flash-lite');
+  const [modelUsed, setModelUsed] = useState<string>('gemini-3.5-flash-lite');
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   // 1. Initialize Supabase Auth Session
@@ -242,7 +269,19 @@ export default function MobileChatPage() {
         }),
       });
 
-      if (!res.ok) throw new Error('API server unreachable');
+      if (!res.ok) {
+        let errorText = `HTTP Error ${res.status}`;
+        try {
+          const errData = await res.json();
+          if (errData?.error || errData?.message) {
+            const raw = errData.error || errData.message;
+            errorText = typeof raw === 'object' ? (raw.message || JSON.stringify(raw)) : String(raw);
+          }
+        } catch {
+          // ignore json parse error
+        }
+        throw new Error(errorText);
+      }
 
       const data = await res.json();
       setMessages((prev) => [...prev, data.message]);
@@ -254,13 +293,19 @@ export default function MobileChatPage() {
       if (data.model_used) {
         setModelUsed(data.model_used);
       }
-    } catch {
+    } catch (err: any) {
+      console.error('Chat API call error:', err);
+      const isConnectionErr = err?.message?.includes('Failed to fetch') || err?.message?.includes('NetworkError');
+      const errContent = isConnectionErr
+        ? '⚠️ ไม่สามารถเชื่อมต่อกับ Elysia Backend Server (http://localhost:3001) ได้ โปรดตรวจสอบว่ารัน `npm run dev` ในโฟลเดอร์หลักแล้วหรือยังนะครับ'
+        : `⚠️ เกิดข้อผิดพลาดจากเซิร์ฟเวอร์: ${err?.message || 'ไม่สามารถรับคำตอบได้'}`;
+
       setMessages((prev) => [
         ...prev,
         {
           id: `err-${Date.now()}`,
           sender_type: 'bot',
-          content: '⚠️ ไม่สามารถเชื่อมต่อกับ Elysia Backend Server (http://localhost:3001) ได้ โปรดตรวจสอบว่ารัน `npm run dev` ในโฟลเดอร์หลักแล้วหรือยังนะครับ',
+          content: errContent,
           created_at: new Date().toISOString(),
         },
       ]);
@@ -347,8 +392,8 @@ export default function MobileChatPage() {
           <header className="chat-header">
             <div className="header-row">
               <div className="bot-id">
-                <div className="avatar-frame">
-                  {selectedBot?.avatar_url || '🦭'}
+                <div className="avatar-frame overflow-hidden p-0.5">
+                  <AvatarIcon url={selectedBot?.avatar_url} name={selectedBot?.name} />
                 </div>
                 <div>
                   <div className="bot-name">{selectedBot?.name || 'น้องพะยูน 🌊'}</div>
@@ -384,7 +429,9 @@ export default function MobileChatPage() {
                     setIsBotMenuOpen(false);
                   }}
                 >
-                  <span className="mini-avatar">{b.avatar_url || '🦭'}</span>
+                  <span className="mini-avatar overflow-hidden p-0.5">
+                    <AvatarIcon url={b.avatar_url} name={b.name} />
+                  </span>
                   <span className="truncate">{b.name}</span>
                 </div>
               ))}
@@ -417,21 +464,21 @@ export default function MobileChatPage() {
               </div>
             </div>
 
+            {/* Model Cascade Info Sub-bar */}
+            <div className="mt-2 px-3 py-1.5 bg-white/80 rounded-xl border-2 border-[#2A4750] flex items-center justify-between text-[11px] text-[#2A4750] font-['Mali'] font-semibold shadow-[2px_2px_0_rgba(42,71,80,0.15)]">
+              <span className="flex items-center space-x-1">
+                <span>🐚</span>
+                <span>โมเดลประมวลผล: <b>{modelUsed}</b></span>
+              </span>
+              <span className="text-[#146C8C]">Gemini Cascade</span>
+            </div>
+
             {/* Decorative Edge-to-Edge Wave Divider */}
             <svg className="wave-divider" viewBox="0 0 400 26" preserveAspectRatio="none">
               <path d="M0 10 Q 20 22 40 10 T 80 10 T 120 10 T 160 10 T 200 10 T 240 10 T 280 10 T 320 10 T 360 10 T 400 10 V26 H0 Z" fill="#FBEFD9" />
               <path d="M0 10 Q 20 22 40 10 T 80 10 T 120 10 T 160 10 T 200 10 T 240 10 T 280 10 T 320 10 T 360 10 T 400 10" stroke="#2A4750" strokeWidth="1.6" fill="none" opacity=".5" />
             </svg>
           </header>
-
-          {/* Model Cascade Info Sub-bar */}
-          <div className="px-4 py-1.5 bg-[#F3E3C0]/90 border-b border-[#D9C79E] flex items-center justify-between text-[11px] text-[#2A4750] font-['Mali'] font-semibold">
-            <span className="flex items-center space-x-1">
-              <span>🐚</span>
-              <span>โมเดลประมวลผล: <b>{modelUsed}</b></span>
-            </span>
-            <span className="text-[#146C8C]">Gemini Cascade</span>
-          </div>
 
           {/* 💬 Chat Messages Main Stream */}
           <main className="chat-main">
@@ -528,25 +575,33 @@ export default function MobileChatPage() {
 
             {/* Modal Form Content */}
             <form onSubmit={handleCreateCustomBot} className="flex-1 overflow-y-auto p-5 space-y-4 text-xs text-[#2A4750]">
-              {/* Avatar Selector */}
+              {/* SVG Avatar Selector */}
               <div>
-                <label className="block font-['Mali'] font-bold text-sm text-[#2A4750] mb-1.5">ไอคอนตัวละคร (Avatar)</label>
+                <label className="block font-['Mali'] font-bold text-sm text-[#2A4750] mb-1.5">ไอคอนตัวละคร (SVG Avatar)</label>
                 <div className="flex flex-wrap gap-2 mb-2">
-                  {AVATAR_PRESETS.map((emoji) => (
+                  {SVG_AVATAR_PRESETS.map((item) => (
                     <button
-                      key={emoji}
+                      key={item.url}
                       type="button"
-                      onClick={() => setNewBotAvatar(emoji)}
-                      className={`w-9 h-9 rounded-xl text-xl flex items-center justify-center border-2 transition-all cursor-pointer ${
-                        newBotAvatar === emoji
+                      onClick={() => setNewBotAvatar(item.url)}
+                      className={`w-9 h-9 rounded-xl p-0.5 flex items-center justify-center border-2 transition-all cursor-pointer overflow-hidden ${
+                        newBotAvatar === item.url
                           ? 'border-[#2A4750] bg-[#D8F0F2] shadow-[2px_2px_0_rgba(42,71,80,0.3)] scale-105'
                           : 'border-[#2A4750]/30 bg-white hover:bg-[#F3E3C0]'
                       }`}
+                      title={item.label}
                     >
-                      {emoji}
+                      <img src={item.url} alt={item.label} className="w-full h-full object-cover rounded-lg" />
                     </button>
                   ))}
                 </div>
+                <input
+                  type="url"
+                  placeholder="หรือวางลิงก์รูป SVG / Image URL อื่นๆ..."
+                  value={newBotAvatar}
+                  onChange={(e) => setNewBotAvatar(e.target.value)}
+                  className="w-full bg-white border-2 border-[#2A4750] rounded-xl px-3 py-1.5 text-[11px] outline-none focus:ring-2 focus:ring-[#146C8C]/30"
+                />
               </div>
 
               {/* Bot Name */}

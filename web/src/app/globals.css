@@ -29,17 +29,32 @@
     height: 100%;
     margin: 0;
     padding: 0;
+    overflow-x: hidden;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
   }
 
   body {
     background: var(--paper);
-    font-family: 'Sarabun', sans-serif;
+    font-family: 'Sarabun', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji', sans-serif;
     color: var(--ink);
     -webkit-tap-highlight-color: transparent;
     overscroll-behavior-y: none;
     height: 100dvh;
     margin: 0;
   }
+}
+
+/* ─── Remove UI Scrollbars (Vertical & Horizontal) ─── */
+*::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+* {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
 }
 
 /* ─── Tape strips (tablet+ only) ─── */
@@ -55,14 +70,14 @@
     #FFD3A6 6px,
     #FFD3A6 12px
   );
-  opacity: 0.85;
-  border: 1px solid rgba(0, 0, 0, 0.05);
-  z-index: 5;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+  opacity: 0.9;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  z-index: 30;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.12);
   pointer-events: none;
 }
-.tape-left  { top: 4px;  left: 14px;  transform: rotate(-8deg); }
-.tape-right { top: 6px;  right: 10px; transform: rotate(9deg);  }
+.tape-left  { top: 2px;  left: 18px;  transform: rotate(-8deg); }
+.tape-right { top: 4px;  right: 16px; transform: rotate(9deg);  }
 
 @media (min-width: 768px) {
   .tape { display: block; }
@@ -100,7 +115,7 @@
 /* ─── Header ─── */
 .chat-header {
   position: relative;
-  padding: 14px 16px 20px;
+  padding: 14px 16px 26px;
   background: linear-gradient(160deg, var(--sea-pale) 0%, #BFE3EA 100%);
   flex-shrink: 0;
   z-index: 5;
@@ -245,7 +260,7 @@
   position: absolute;
   left: 0;
   right: 0;
-  bottom: -25px;
+  bottom: -1px;
   width: 100%;
   height: 26px;
   z-index: 5;
@@ -257,23 +272,19 @@
   flex: 1;
   position: relative;
   overflow-y: auto;
-  padding: 24px 16px 14px;
+  overflow-x: hidden;
+  padding: 16px 16px 14px;
   display: flex;
   flex-direction: column;
   gap: 14px;
   z-index: 1;
-}
-.chat-main::-webkit-scrollbar { width: 5px; }
-.chat-main::-webkit-scrollbar-thumb {
-  background: var(--sand-line);
-  border-radius: 10px;
 }
 
 /* ─── Message rows ─── */
 .msg-row {
   display: flex;
   flex-direction: column;
-  max-width: 85%;
+  max-width: 88%;
 }
 .msg-row.bot  { align-self: flex-start; align-items: flex-start; }
 .msg-row.user { align-self: flex-end;   align-items: flex-end;   }
@@ -285,6 +296,10 @@
   font-size: 0.92rem;
   line-height: 1.55;
   border: 2px solid var(--ink);
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  max-width: 100%;
 }
 
 .msg-row.bot .bubble {
