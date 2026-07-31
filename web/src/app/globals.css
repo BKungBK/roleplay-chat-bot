@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg-sand: #faf8f5;
+    --bg-ocean-soft: #f0f9ff;
+    --card-seafoam: #f0fdf4;
+    --primary-ocean: #0284c7;
+    --primary-teal: #0d9488;
+    --text-main: #1e293b;
+    --text-muted: #64748b;
+  }
+
+  body {
+    background-color: var(--bg-sand);
+    color: var(--text-main);
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior-y: none;
+  }
+}
+
+/* Custom Soft Wave Header & Floating Elements */
+.ocean-wave-header {
+  background: linear-gradient(135deg, #e0f2fe 0%, #ccfbf1 50%, #bae6fd 100%);
+  border-bottom: 2px solid #bae6fd;
+}
+
+.bot-bubble {
+  background: linear-gradient(135deg, #ffffff 0%, #f0f9ff 100%);
+  border: 1.5px solid #e0f2fe;
+  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.05);
+}
+
+.user-bubble {
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.15);
+}
+
+/* Safe Area for Mobile Keyboards & Devices */
+.safe-bottom-padding {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+}

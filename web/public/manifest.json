@@ -1,0 +1,22 @@
+{
+  "name": "Ocean Roleplay Chat",
+  "short_name": "OceanChat",
+  "description": "แชทบอทบทบาทสมมติ AI สไตล์นุ่มนวล อบอุ่น ฟีลลิ่งธรรมชาติทะเล",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#e0f2fe",
+  "theme_color": "#0284c7",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
