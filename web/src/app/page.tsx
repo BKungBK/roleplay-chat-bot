@@ -29,6 +29,18 @@ const AVATAR_PRESETS = [
   '🦭', '🐬', '🪼', '💖', '🌸', '✨', '🦊', '🐱', '☕', '🎨'
 ];
 
+function formatThaiTime(dateStr?: string): string {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleTimeString('th-TH', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'Asia/Bangkok',
+  });
+}
+
 function getRelationshipRank(score: number): { name: string; icon: string; color: string } {
   if (score >= 80) return { name: 'ผูกพันลึกซึ้ง', icon: '💞', color: 'from-pink-500 to-rose-500' };
   if (score >= 60) return { name: 'คนพิเศษ', icon: '💖', color: 'from-purple-500 to-pink-500' };
@@ -161,10 +173,38 @@ export default function MobileChatPage() {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
 
+  // Helper to ensure chat session exists before sending
+  const getOrCreateChatId = async (): Promise<string | null> => {
+    if (activeChatId) return activeChatId;
+    if (!selectedBot || !authToken) return null;
+
+    try {
+      const res = await fetch(`${API_BASE}/api/chats`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({ botId: selectedBot.id }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.chatId) {
+          setActiveChatId(data.chatId);
+          return data.chatId;
+        }
+      }
+    } catch (err) {
+      console.warn('Inline chat creation error:', err);
+    }
+    return null;
+  };
+
   // 4. Send Message using Real chatId UUID & Auth Bearer Token
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!inputMessage.trim() || isLoading || !selectedBot || !activeChatId || !authToken) return;
+    if (!inputMessage.trim() || isLoading || !selectedBot) return;
 
     const userText = inputMessage.trim();
     const userMsg: Message = {
@@ -179,6 +219,11 @@ export default function MobileChatPage() {
     setIsLoading(true);
 
     try {
+      const targetChatId = await getOrCreateChatId();
+      if (!targetChatId) {
+        throw new Error('Chat session not initialized');
+      }
+
       const res = await fetch(`${API_BASE}/api/chat`, {
         method: 'POST',
         headers: {
@@ -186,7 +231,7 @@ export default function MobileChatPage() {
           'Authorization': `Bearer ${authToken}`,
         },
         body: JSON.stringify({
-          chatId: activeChatId,
+          chatId: targetChatId,
           botId: selectedBot.id,
           message: userText,
         }),
@@ -367,7 +412,7 @@ export default function MobileChatPage() {
               </div>
             </div>
 
-            {/* Decorative Wave Divider */}
+            {/* Decorative Edge-to-Edge Wave Divider */}
             <svg className="wave-divider" viewBox="0 0 400 26" preserveAspectRatio="none">
               <path d="M0 10 Q 20 22 40 10 T 80 10 T 120 10 T 160 10 T 200 10 T 240 10 T 280 10 T 320 10 T 360 10 T 400 10 V26 H0 Z" fill="#FBEFD9" />
               <path d="M0 10 Q 20 22 40 10 T 80 10 T 120 10 T 160 10 T 200 10 T 240 10 T 280 10 T 320 10 T 360 10 T 400 10" stroke="#2A4750" strokeWidth="1.6" fill="none" opacity=".5" />
@@ -413,10 +458,7 @@ export default function MobileChatPage() {
                   {msg.content}
                 </div>
                 <div className="msg-time">
-                  {new Date(msg.created_at).toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
+                  {formatThaiTime(msg.created_at)}
                 </div>
               </div>
             ))}
@@ -448,7 +490,7 @@ export default function MobileChatPage() {
               <button
                 type="submit"
                 className="send-btn"
-                disabled={!inputMessage.trim() || isLoading || !activeChatId}
+                disabled={!inputMessage.trim() || isLoading}
                 aria-label="ส่งข้อความ"
               >
                 <svg width="20" height="20" viewBox="0 0 24 24">
