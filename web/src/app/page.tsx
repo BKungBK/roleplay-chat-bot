@@ -23,7 +23,7 @@ interface Bot {
   temperature?: number;
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
 
 const SVG_AVATAR_PRESETS = [
   { label: 'พะยูน', url: 'https://api.dicebear.com/7.x/fun-emoji/svg?seed=Seal&backgroundColor=b6e3f4' },
