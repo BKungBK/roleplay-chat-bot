@@ -28,13 +28,13 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { name, avatar_url, personality, speech_style, likes_dislikes, boundaries, temperature } = body;
+    const { name, avatar_url, gender, personality, speech_style, likes_dislikes, boundaries, temperature } = body;
 
     if (!name || !personality) {
       return NextResponse.json({ error: 'Name and personality are required' }, { status: 400 });
     }
 
-    const compiledPrompt = compileSystemPrompt({ name, personality, speech_style, likes_dislikes, boundaries });
+    const compiledPrompt = compileSystemPrompt({ name, gender, personality, speech_style, likes_dislikes, boundaries });
     const supabase = getSupabaseAdmin();
 
     const { data, error } = await supabase
@@ -43,6 +43,7 @@ export async function POST(req: NextRequest) {
         user_id: activeUser.id,
         name,
         avatar_url: avatar_url || `https://api.dicebear.com/7.x/fun-emoji/svg?seed=${encodeURIComponent(name)}`,
+        gender: gender || 'unspecified',
         personality,
         speech_style,
         likes_dislikes,

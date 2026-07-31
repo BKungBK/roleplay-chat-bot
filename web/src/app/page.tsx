@@ -15,6 +15,7 @@ interface Bot {
   id: string;
   name: string;
   avatar_url?: string;
+  gender?: 'female' | 'male' | 'unspecified';
   personality: string;
   speech_style?: string;
   likes_dislikes?: string;
@@ -24,6 +25,16 @@ interface Bot {
 }
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
+
+function getGreetingForBot(bot: Bot): string {
+  if (bot.gender === 'male') {
+    return `สวัสดีครับ! ผมคือ ${bot.name} ยินดีที่ได้คุยกันนะครับ วันนี้มีเรื่องอะไรอยากเล่าให้ฟังไหมครับ? ✨`;
+  }
+  if (bot.gender === 'female') {
+    return `สวัสดีค่ะ! คุณกำลังคุยกับ ${bot.name} อยู่ในขณะนี้นะคะ วันนี้มีเรื่องอะไรอยากเล่าให้ฟังหรือเปล่าเอ่ย? 🐚✨`;
+  }
+  return `สวัสดีครับ/ค่ะ! ยินดีที่ได้พบกันนะ คุณกำลังคุยกับ ${bot.name} อยู่ในขณะนี้นะคะ ✨`;
+}
 
 const SVG_AVATAR_PRESETS = [
   { label: 'พะยูน', url: 'https://api.dicebear.com/7.x/fun-emoji/svg?seed=Seal&backgroundColor=b6e3f4' },
@@ -102,6 +113,7 @@ export default function MobileChatPage() {
   // Creator Form State
   const [newBotName, setNewBotName] = useState('');
   const [newBotAvatar, setNewBotAvatar] = useState(SVG_AVATAR_PRESETS[0].url);
+  const [newBotGender, setNewBotGender] = useState<'female' | 'male' | 'unspecified'>('female');
   const [newBotPersonality, setNewBotPersonality] = useState('');
   const [newBotSpeechStyle, setNewBotSpeechStyle] = useState('');
   const [newBotLikes, setNewBotLikes] = useState('');
@@ -109,14 +121,7 @@ export default function MobileChatPage() {
   const [newBotTemp, setNewBotTemp] = useState(0.7);
   const [isCreatingBot, setIsCreatingBot] = useState(false);
 
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: 'welcome-msg',
-      sender_type: 'bot',
-      content: 'สวัสดีวันสบายๆ ยามเช้ากลางทะเลนะคะ~ วันนี้มีเรื่องอะไรอยากเล่าให้ฟังหรือเปล่าเอ่ย? 🐚✨',
-      created_at: '2026-01-01T08:00:00.000Z',
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [modelUsed, setModelUsed] = useState<string>('gemini-3.5-flash-lite');
@@ -157,12 +162,23 @@ export default function MobileChatPage() {
     loadBots();
   }, []);
 
-  // 3. Create Real Chat Session when Selected Bot changes
+  // 3. Create Real Chat Session when Selected Bot changes & Update Greeting
   useEffect(() => {
     async function createOrInitChat() {
-      if (!selectedBot?.id || !authToken) return;
+      if (!selectedBot?.id) return;
       if (initializedBotIdRef.current === selectedBot.id) return;
       initializedBotIdRef.current = selectedBot.id;
+
+      setMessages([
+        {
+          id: `welcome-${selectedBot.id}`,
+          sender_type: 'bot',
+          content: getGreetingForBot(selectedBot),
+          created_at: new Date().toISOString(),
+        },
+      ]);
+
+      if (!authToken) return;
 
       try {
         const res = await fetch(`${API_BASE}/api/chats`, {
@@ -180,14 +196,6 @@ export default function MobileChatPage() {
             setActiveChatId(data.chatId);
             setRelationshipScore(data.chat?.relationship_score ?? 50);
             setCurrentMood(data.chat?.current_mood || 'พร้อมฟังเสมอ');
-            setMessages([
-              {
-                id: `welcome-${selectedBot.id}`,
-                sender_type: 'bot',
-                content: `สวัสดีค่ะ! คุณกำลังคุยกับ ${selectedBot.name} อยู่ในขณะนี้นะคะ 🐚✨`,
-                created_at: new Date().toISOString(),
-              },
-            ]);
           }
         }
       } catch (err) {
@@ -335,6 +343,7 @@ export default function MobileChatPage() {
       id: `bot-custom-${Date.now()}`,
       name: newBotName.trim(),
       avatar_url: newBotAvatar,
+      gender: newBotGender,
       personality: newBotPersonality.trim(),
       speech_style: newBotSpeechStyle.trim(),
       likes_dislikes: newBotLikes.trim(),
@@ -356,6 +365,7 @@ export default function MobileChatPage() {
         body: JSON.stringify({
           name: newBotName.trim(),
           avatar_url: newBotAvatar,
+          gender: newBotGender,
           personality: newBotPersonality.trim(),
           speech_style: newBotSpeechStyle.trim(),
           likes_dislikes: newBotLikes.trim(),
@@ -631,6 +641,46 @@ export default function MobileChatPage() {
                   onChange={(e) => setNewBotAvatar(e.target.value)}
                   className="w-full bg-white border-2 border-[#2A4750] rounded-xl px-3 py-1.5 text-[11px] outline-none focus:ring-2 focus:ring-[#146C8C]/30"
                 />
+              </div>
+
+              {/* Gender Selector */}
+              <div>
+                <label className="block font-['Mali'] font-bold text-sm text-[#2A4750] mb-1.5">เพศตัวละคร (Gender)</label>
+                <div className="flex items-center space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => setNewBotGender('female')}
+                    className={`flex-1 py-1.5 px-2 rounded-xl border-2 font-['Mali'] font-semibold text-xs flex items-center justify-center space-x-1 cursor-pointer transition-all ${
+                      newBotGender === 'female'
+                        ? 'border-[#2A4750] bg-[#D8F0F2] text-[#146C8C] shadow-[2px_2px_0_rgba(42,71,80,0.2)] font-bold'
+                        : 'border-[#2A4750]/30 bg-white text-[#2A4750] hover:bg-[#F3E3C0]'
+                    }`}
+                  >
+                    <span>🌸 หญิง (ค่ะ/นะคะ)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewBotGender('male')}
+                    className={`flex-1 py-1.5 px-2 rounded-xl border-2 font-['Mali'] font-semibold text-xs flex items-center justify-center space-x-1 cursor-pointer transition-all ${
+                      newBotGender === 'male'
+                        ? 'border-[#2A4750] bg-[#D8F0F2] text-[#146C8C] shadow-[2px_2px_0_rgba(42,71,80,0.2)] font-bold'
+                        : 'border-[#2A4750]/30 bg-white text-[#2A4750] hover:bg-[#F3E3C0]'
+                    }`}
+                  >
+                    <span>🧢 ชาย (ครับ/นะครับ)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewBotGender('unspecified')}
+                    className={`flex-1 py-1.5 px-2 rounded-xl border-2 font-['Mali'] font-semibold text-xs flex items-center justify-center space-x-1 cursor-pointer transition-all ${
+                      newBotGender === 'unspecified'
+                        ? 'border-[#2A4750] bg-[#D8F0F2] text-[#146C8C] shadow-[2px_2px_0_rgba(42,71,80,0.2)] font-bold'
+                        : 'border-[#2A4750]/30 bg-white text-[#2A4750] hover:bg-[#F3E3C0]'
+                    }`}
+                  >
+                    <span>✨ อื่นๆ / ไม่ระบุ</span>
+                  </button>
+                </div>
               </div>
 
               {/* Bot Name */}

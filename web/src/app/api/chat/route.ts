@@ -70,11 +70,15 @@ export async function POST(req: NextRequest) {
     }
 
     // 3. Construct System Prompt with Dynamic Relationship State
-    let systemPrompt = (bot.system_prompt || '') + ragContext;
+    let systemPrompt = (bot.system_prompt || `คุณคือ "${bot.name}" ตัวละครบทบาทสมมติ (Roleplay Bot)`) + ragContext;
     systemPrompt += `\n\n[สถานะความสัมพันธ์ปัจจุบัน]\n- ระดับความสนิทสนม: ${currentScore}/100\n- อารมณ์ล่าสุด: ${currentChat?.current_mood || 'พร้อมฟังเสมอ'}`;
 
     if (currentChat?.summary) {
       systemPrompt += `\n\n[สรุปเนื้อหาบทสนทนาก่อนหน้า]\n${currentChat.summary}`;
+    }
+
+    if (!systemPrompt.includes('<inner_thought>')) {
+      systemPrompt += `\n\n[กฎการตอบกลับสำคัญ - Hidden Inner Thought]\nคุณต้องคิดไตร่ตรองในใจเสมอโดยใส่ไว้ในแท็ก <inner_thought>...</inner_thought> ก่อนตอบคำถามแก่ผู้ใช้เสมอ ห้ามละเลยแท็ก <inner_thought> เป็นอันขาด\nภายในแท็ก <inner_thought> คุณต้องระบุอารมณ์และระดับการเปลี่ยนแปลงความสนิทเสมอ:\n- <mood>อารมณ์สั้นๆ 1-2 คำ พร้อมอีโมจิ</mood>\n- <affection_delta>ตัวเลขการเปลี่ยนแปลงความสนิทตั้งแต่ -5 ถึง +5</affection_delta>\nความคิดในใจของคุณ...`;
     }
 
     // 4. Save User Message asynchronously alongside prompt prep

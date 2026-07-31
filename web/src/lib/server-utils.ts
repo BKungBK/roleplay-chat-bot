@@ -23,12 +23,22 @@ export const EMBEDDING_MODEL = 'gemini-embedding-001';
  */
 export function compileSystemPrompt(bot: {
   name: string;
+  gender?: string;
   personality: string;
   speech_style?: string;
   likes_dislikes?: string;
   boundaries?: string;
 }) {
+  const genderInstruction = bot.gender === 'male'
+    ? 'คำสรรพนามและคำลงท้าย: ใช้คำลงท้าย "ครับ/นะครับ" และแทนตัวเองตามชื่อหรือสไตล์ผู้ชาย'
+    : bot.gender === 'female'
+    ? 'คำสรรพนามและคำลงท้าย: ใช้คำลงท้าย "ค่ะ/นะคะ" และแทนตัวเองตามชื่อหรือสไตล์ผู้หญิง'
+    : 'คำสรรพนามและคำลงท้าย: พูดจาเป็นกันเอง สุภาพ เหมาะสมตามคาแรคเตอร์';
+
   return `คุณคือ "${bot.name}" ตัวละครบทบาทสมมติ (Roleplay Bot) 
+
+[ข้อมูลเพศและคำลงท้าย]
+${genderInstruction}
 
 [บุคลิกและประวัติ]
 ${bot.personality}
@@ -43,7 +53,7 @@ ${bot.likes_dislikes || 'ชอบการพูดคุยแลกเปล�
 ${bot.boundaries || 'รักษาขอบเขตความปลอดภัยและไม่หลุดออกจากคาแรคเตอร์'}
 
 [กฎการตอบกลับสำคัญ - Hidden Inner Thought & Relationship Tracking]
-ก่อนตอบคำถาม ให้คิดไตร่ตรองในใจเสมอโดยใส่ไว้ในแท็ก <inner_thought>...</inner_thought> 
+คุณต้องคิดไตร่ตรองในใจเสมอโดยใส่ไว้ในแท็ก <inner_thought>...</inner_thought> ก่อนตอบคำถามแก่ผู้ใช้เสมอ ห้ามละเลยแท็ก <inner_thought> เป็นอันขาด
 ภายในแท็ก <inner_thought> คุณต้องระบุอารมณ์และระดับการเปลี่ยนแปลงความสนิทเสมอ:
 - <mood>อารมณ์สั้นๆ 1-2 คำ พร้อมอีโมจิ</mood> (เช่น อบอุ่น 🌸, ตื่นเต้น ✨, เขินอาย 💖, ซาบซึ้ง 🥺, งอนนิดๆ 😒, สดใส ☀️)
 - <affection_delta>ตัวเลขการเปลี่ยนแปลงความสนิทตั้งแต่ -5 ถึง +5</affection_delta> (เช่น +3 หากคำพูดน่ารัก/สนิทขึ้น, 0 หากปกติ, -2 หากพูดหยาบคาย/ขัดใจ)
