@@ -41,11 +41,19 @@ ${bot.likes_dislikes || 'ชอบการพูดคุยแลกเปล�
 [ขอบเขตและข้อกำหนด (Boundaries)]
 ${bot.boundaries || 'รักษาขอบเขตความปลอดภัยและไม่หลุดออกจากคาแรคเตอร์'}
 
-[กฎการตอบกลับสำคัญ - Hidden Inner Thought]
-ก่อนตอบคำถาม ให้คิดไตร่ตรองในใจเสมอโดยใส่ไว้ในแท็ก <inner_thought>...</inner_thought> เพื่อกำหนดอารมณ์ มุมมอง และเจตนาของตัวละคร จากนั้นค่อยตามด้วยคำตอบจริงที่จะแสดงให้ผู้ใช้เห็น
+[กฎการตอบกลับสำคัญ - Hidden Inner Thought & Relationship Tracking]
+ก่อนตอบคำถาม ให้คิดไตร่ตรองในใจเสมอโดยใส่ไว้ในแท็ก <inner_thought>...</inner_thought> 
+ภายในแท็ก <inner_thought> คุณต้องระบุอารมณ์และระดับการเปลี่ยนแปลงความสนิทเสมอ:
+- <mood>อารมณ์สั้นๆ 1-2 คำ พร้อมอีโมจิ</mood> (เช่น อบอุ่น 🌸, ตื่นเต้น ✨, เขินอาย 💖, ซาบซึ้ง 🥺, งอนนิดๆ 😒, สดใส ☀️)
+- <affection_delta>ตัวเลขการเปลี่ยนแปลงความสนิทตั้งแต่ -5 ถึง +5</affection_delta> (เช่น +3 หากคำพูดน่ารัก/สนิทขึ้น, 0 หากปกติ, -2 หากพูดหยาบคาย/ขัดใจ)
+- ความคิดในใจ ความรู้สึกต่อผู้ใช้ เหตุผลของอารมณ์
 
 ตัวอย่างรูปแบบผลลัพธ์:
-<inner_thought>ฉันรู้สึกดีใจที่เขาถามถึงเรื่องนี้ แต่จะลองหยอกล้อกลับนุ่มๆ</inner_thought>
+<inner_thought>
+<mood>อบอุ่น 🌸</mood>
+<affection_delta>+3</affection_delta>
+ฉันรู้สึกดีใจที่เขาถามถึงเรื่องนี้อย่างอ่อนโยน
+</inner_thought>
 สวัสดีค่ะ! ดีใจจังเลยที่ถามถึงเรื่องนี้นะคะ~`;
 }
 
@@ -112,7 +120,7 @@ const app = new Elysia()
   .use(cors())
   .get('/api/health', () => ({ status: 'ok', timestamp: new Date().toISOString() }))
 
-  // Create / Compile New Bot Persona (Auth Required)
+  // Create / Compile New Bot Persona (Custom Character Studio)
   .post(
     '/api/bots',
     async ({ body, headers, set }) => {
@@ -125,7 +133,7 @@ const app = new Elysia()
         .insert({
           user_id: activeUser.id,
           name: body.name,
-          avatar_url: body.avatar_url,
+          avatar_url: body.avatar_url || 'https://api.dicebear.com/7.x/bottts/svg?seed=' + encodeURIComponent(body.name),
           personality: body.personality,
           speech_style: body.speech_style,
           likes_dislikes: body.likes_dislikes,
@@ -159,7 +167,7 @@ const app = new Elysia()
     return { bots: data };
   })
 
-  // Create New Chat Session (Auth Required - Issue #1 Fix)
+  // Create New Chat Session (Auth Required)
   .post(
     '/api/chats',
     async ({ body, headers, set }) => {
@@ -173,7 +181,9 @@ const app = new Elysia()
         .insert({
           user_id: activeUser.id,
           bot_id: botId,
-          title: title || 'บทสนทนาใหม่'
+          title: title || 'บทสนทนาใหม่',
+          relationship_score: 50,
+          current_mood: 'แจ่มใส 😊'
         })
         .select()
         .single();
@@ -189,6 +199,25 @@ const app = new Elysia()
     }
   )
 
+  // Fetch Single Chat Detail (Auth Required)
+  .get(
+    '/api/chats/:chatId',
+    async ({ params, headers, set }) => {
+      const activeUser = await getAuthenticatedUser(headers, set);
+      if (!activeUser) return 'Unauthorized';
+
+      const { chatId } = params;
+      const { data: chat, error } = await supabase
+        .from('chats')
+        .select('*, bots(*)')
+        .eq('id', chatId)
+        .single();
+
+      if (error) throw new Error(error.message);
+      return { chat };
+    }
+  )
+
   // Fetch Chat Message History (Auth Required)
   .get(
     '/api/chats/:chatId/messages',
@@ -200,7 +229,7 @@ const app = new Elysia()
 
       const { data: messages, error } = await supabase
         .from('messages')
-        .select('id, sender_type, content, created_at')
+        .select('id, sender_type, content, inner_thought, created_at')
         .eq('chat_id', chatId)
         .order('created_at', { ascending: true });
 
@@ -209,7 +238,7 @@ const app = new Elysia()
     }
   )
 
-  // Roleplay Chat Turn Completion with Vector RAG & Rolling Summary (Issue #2 Fix)
+  // Roleplay Chat Turn Completion with Mood & Relationship Score Tracking
   .post(
     '/api/chat',
     async ({ body, headers, set }) => {
@@ -222,7 +251,11 @@ const app = new Elysia()
       const { data: bot, error: botErr } = await supabase.from('bots').select('*').eq('id', botId).single();
       if (botErr || !bot) throw new Error('Bot not found');
 
-      // 2. Generate Embedding for User Message (RAG Memory Retrieval)
+      // 2. Fetch Chat Session State (Relationship Score & Mood)
+      const { data: currentChat } = await supabase.from('chats').select('relationship_score, current_mood, summary').eq('id', chatId).single();
+      let currentScore = currentChat?.relationship_score ?? 50;
+
+      // 3. Generate Embedding for User Message (RAG Memory Retrieval)
       let userEmbedding: number[] | null = null;
       try {
         const embedRes = await ai.models.embedContent({
@@ -234,7 +267,7 @@ const app = new Elysia()
         console.warn('Embedding generation skipped/failed:', err);
       }
 
-      // 3. Retrieve Vector Memories (RAG)
+      // 4. Retrieve Vector Memories (RAG)
       let ragContext = '';
       if (userEmbedding) {
         try {
@@ -255,19 +288,15 @@ const app = new Elysia()
         }
       }
 
-      // 4. Fetch Rolling Summary
-      const { data: chatData } = await supabase
-        .from('chats')
-        .select('summary')
-        .eq('id', chatId)
-        .single();
-
+      // 5. Construct System Prompt with Dynamic Relationship State
       let systemPrompt = bot.system_prompt + ragContext;
-      if (chatData?.summary) {
-        systemPrompt += `\n\n[สรุปเนื้อหาบทสนทนาก่อนหน้า]\n${chatData.summary}`;
+      systemPrompt += `\n\n[สถานะความสัมพันธ์ปัจจุบัน]\n- ระดับความสนิทสนม: ${currentScore}/100\n- อารมณ์ล่าสุด: ${currentChat?.current_mood || 'แจ่มใส 😊'}`;
+
+      if (currentChat?.summary) {
+        systemPrompt += `\n\n[สรุปเนื้อหาบทสนทนาก่อนหน้า]\n${currentChat.summary}`;
       }
 
-      // 5. Fetch Recent Chat History (Sliding Window - Last 15 messages)
+      // 6. Fetch Recent Chat History (Sliding Window - Last 15 messages)
       const { data: rawHistory } = await supabase
         .from('messages')
         .select('sender_type, content')
@@ -277,17 +306,17 @@ const app = new Elysia()
 
       const history = (rawHistory || []).reverse();
 
-      // 6. Save User Message
+      // 7. Save User Message
       await supabase.from('messages').insert({
         chat_id: chatId,
         sender_type: 'user',
         content: message
       });
 
-      // 7. Determine Model via Cascade Strategy
+      // 8. Determine Model via Cascade Strategy
       const targetModel = selectModel(message, history.length);
 
-      // 8. Construct Prompt History for Gemini
+      // 9. Construct Prompt History for Gemini
       const formattedHistory = history.map((m) => ({
         role: m.sender_type === 'user' ? 'user' : 'model',
         parts: [{ text: m.content }]
@@ -298,21 +327,47 @@ const app = new Elysia()
         { role: 'user', parts: [{ text: message }] }
       ];
 
-      // 9. Call Gemini API with Fallback & System Instruction
+      // 10. Call Gemini API with Fallback
       const response = await generateContentWithFallback(targetModel, contents, systemPrompt, bot.temperature || 0.7);
       const fullOutput = response.text || '';
 
-      // 10. Extract Hidden inner_thought & Visible Reply
+      // 11. Extract Hidden inner_thought, Mood, Affection Delta & Visible Reply
       let innerThought = '';
+      let extractedMood = currentChat?.current_mood || 'แจ่มใส 😊';
+      let affectionDelta = 0;
       let visibleReply = fullOutput;
 
       const thoughtMatch = fullOutput.match(/<inner_thought>([\s\S]*?)<\/inner_thought>/);
       if (thoughtMatch) {
         innerThought = thoughtMatch[1].trim();
+
+        // Extract Mood
+        const moodMatch = innerThought.match(/<mood>([\s\S]*?)<\/mood>/);
+        if (moodMatch) {
+          extractedMood = moodMatch[1].trim();
+        }
+
+        // Extract Affection Delta
+        const deltaMatch = innerThought.match(/<affection_delta>([+-]?\d+)<\/affection_delta>/);
+        if (deltaMatch) {
+          affectionDelta = parseInt(deltaMatch[1], 10);
+        }
+
+        // Clean visible reply
         visibleReply = fullOutput.replace(/<inner_thought>[\s\S]*?<\/inner_thought>/, '').trim();
       }
 
-      // 11. Save Bot Message
+      // Calculate New Relationship Score (Clamped 0 to 100)
+      const newScore = Math.min(100, Math.max(0, currentScore + affectionDelta));
+
+      // 12. Update Chat Session State in Supabase
+      await supabase.from('chats').update({
+        relationship_score: newScore,
+        current_mood: extractedMood,
+        updated_at: new Date().toISOString()
+      }).eq('id', chatId);
+
+      // 13. Save Bot Message to Database
       const { data: savedMsg, error: msgErr } = await supabase
         .from('messages')
         .insert({
@@ -327,7 +382,7 @@ const app = new Elysia()
 
       if (msgErr) throw new Error(msgErr.message);
 
-      // 12. Asynchronous Long-term Fact Memory Save
+      // 14. Asynchronous Long-term Fact Memory Save
       (async () => {
         try {
           const factPrompt = `วิเคราะห์ข้อความต่อไปนี้ของผู้ใช้ว่ามีข้อเท็จจริงระยะยาวที่สำคัญเกี่ยวกับผู้ใช้หรือไม่ (เช่น ชื่อ, งานอดิเรก, สิ่งที่ชอบ/ไม่ชอบ, ประวัติส่วนตัว, เหตุการณ์สำคัญ):\nข้อความผู้ใช้: "${message}"\n\nหากมีข้อเท็จจริงสำคัญ ให้สรุปเป็นประโยคสั้นๆ 1 ประโยค หากไม่มี ให้ตอบเพียง "NONE"`;
@@ -356,53 +411,19 @@ const app = new Elysia()
         }
       })();
 
-      // 13. Asynchronous Rolling Summary Trigger (>15 turns)
-      (async () => {
-        try {
-          const { count } = await supabase
-            .from('messages')
-            .select('*', { count: 'exact', head: true })
-            .eq('chat_id', chatId);
-
-          if (count && count >= 16 && count % 5 === 0) {
-            const { data: oldTurns } = await supabase
-              .from('messages')
-              .select('id, sender_type, content')
-              .eq('chat_id', chatId)
-              .order('created_at', { ascending: true })
-              .limit(count - 10);
-
-            if (oldTurns && oldTurns.length > 5) {
-              const turnsText = oldTurns.map(t => `${t.sender_type}: ${t.content}`).join('\n');
-              const summaryPrompt = `สรุปย่อประเด็นสำคัญของบทสนทนานี้อย่างกระชับ:\n${turnsText}`;
-              
-              const sumRes = await generateContentWithFallback(DEFAULT_MODEL, [{ role: 'user', parts: [{ text: summaryPrompt }] }], '', 0.3);
-              const summaryText = sumRes.text?.trim();
-
-              if (summaryText) {
-                await supabase.from('chats').update({ summary: summaryText }).eq('id', chatId);
-                await supabase.from('memory_summaries').insert({
-                  chat_id: chatId,
-                  summary_text: summaryText,
-                  turn_count: oldTurns.length,
-                  start_message_id: oldTurns[0].id,
-                  end_message_id: oldTurns[oldTurns.length - 1].id
-                });
-              }
-            }
-          }
-        } catch (err) {
-          console.warn('Async rolling summary error:', err);
-        }
-      })();
-
       return {
         success: true,
         message: {
           id: savedMsg.id,
           sender_type: 'bot',
           content: visibleReply,
+          inner_thought: innerThought,
           created_at: savedMsg.created_at
+        },
+        relationship: {
+          score: newScore,
+          mood: extractedMood,
+          delta: affectionDelta
         },
         model_used: targetModel
       };
