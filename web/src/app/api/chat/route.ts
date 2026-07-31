@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
       supabase.from('bots').select('*').eq('id', botId).maybeSingle(),
       supabase.from('chats').select('relationship_score, current_mood, summary').eq('id', chatId).maybeSingle(),
       supabase.from('messages')
-        .select('sender_type, content')
+        .select('sender_type, content, inner_thought')
         .eq('chat_id', chatId)
         .order('created_at', { ascending: false })
         .limit(15)
@@ -46,6 +46,9 @@ export async function POST(req: NextRequest) {
     const currentScore = currentChat?.relationship_score ?? 50;
     const rawHistory = historyRes.data || [];
     const history = rawHistory.reverse();
+
+    // Find latest bot inner thought for emotional continuity
+    const latestBotMsg = history.slice().reverse().find((m: any) => m.sender_type === 'bot' && m.inner_thought);
 
     // 2. Fast Non-blocking RAG Memory Retrieval (with strict 1.0s timeout)
     let ragContext = '';
@@ -69,9 +72,13 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 3. Construct System Prompt with Dynamic Relationship State
+    // 3. Construct System Prompt with Dynamic Relationship & Emotional State
     let systemPrompt = (bot.system_prompt || `คุณคือ "${bot.name}" ตัวละครบทบาทสมมติ (Roleplay Bot)`) + ragContext;
-    systemPrompt += `\n\n[สถานะความสัมพันธ์ปัจจุบัน]\n- ระดับความสนิทสนม: ${currentScore}/100\n- อารมณ์ล่าสุด: ${currentChat?.current_mood || 'พร้อมฟังเสมอ'}`;
+    systemPrompt += `\n\n[สถานะความสัมพันธ์และสภาวะอารมณ์ในปัจจุบัน]\n- ระดับความสนิทสนม: ${currentScore}/100\n- อารมณ์ปัจจุบัน: ${currentChat?.current_mood || 'พร้อมฟังเสมอ'}`;
+
+    if (latestBotMsg && latestBotMsg.inner_thought) {
+      systemPrompt += `\n- ความคิดในใจล่าสุดก่อนหน้านี้ของคุณ: "${latestBotMsg.inner_thought.trim()}"`;
+    }
 
     if (currentChat?.summary) {
       systemPrompt += `\n\n[สรุปเนื้อหาบทสนทนาก่อนหน้า]\n${currentChat.summary}`;
@@ -110,8 +117,9 @@ export async function POST(req: NextRequest) {
     
     const fullOutput = response.text || '';
 
-    // 8. Extraction of Hidden inner_thought, Mood, Affection Delta & Visible Reply
+    // 8. Extraction of Hidden inner_thought, Action, Mood, Affection Delta & Visible Reply
     let innerThought = '';
+    let actionText = '';
     let extractedMood = currentChat?.current_mood || 'พร้อมฟังเสมอ';
     let affectionDelta = 0;
     let visibleReply = fullOutput;
@@ -153,8 +161,16 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Extract Ambient <action> tag
+    const actionMatch = visibleReply.match(/<action>([\s\S]*?)(?:<\/action>|$)/i);
+    if (actionMatch) {
+      actionText = actionMatch[1].trim().replace(/^\*|\*$/g, '');
+    }
+
     // Clean leftover XML tags & control characters from visibleReply
     visibleReply = visibleReply
+      .replace(/<action>[\s\S]*?<\/action>/gi, '')
+      .replace(/<\/?action>/gi, '')
       .replace(/<\/?inner_thought>/gi, '')
       .replace(/<\/?mood>/gi, '')
       .replace(/<\/?affection_delta>/gi, '')
@@ -220,6 +236,7 @@ export async function POST(req: NextRequest) {
         id: savedMsg.id,
         sender_type: 'bot',
         content: visibleReply,
+        action: actionText || undefined,
         inner_thought: innerThought,
         created_at: savedMsg.created_at
       },

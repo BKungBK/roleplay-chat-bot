@@ -7,6 +7,7 @@ interface Message {
   id: string;
   sender_type: 'user' | 'bot';
   content: string;
+  action?: string;
   inner_thought?: string;
   created_at: string;
 }
@@ -20,6 +21,7 @@ interface Bot {
   speech_style?: string;
   likes_dislikes?: string;
   boundaries?: string;
+  example_dialogue?: string;
   system_prompt?: string;
   temperature?: number;
 }
@@ -49,12 +51,40 @@ const SVG_AVATAR_PRESETS = [
   { label: 'หุ่นยนต์', url: 'https://api.dicebear.com/7.x/bottts/svg?seed=Robot&backgroundColor=b6e3f4' }
 ];
 
-const FALLBACK_BOT: Bot = {
-  id: 'bbedc638-844b-4af3-87ef-24290fcfa735',
-  name: 'น้องพะยูน 🌊',
-  avatar_url: 'https://api.dicebear.com/7.x/fun-emoji/svg?seed=Seal&backgroundColor=b6e3f4',
-  personality: 'เพื่อนสนิทที่คอยฟังและให้กำลังใจอย่างนุ่มนวล ชอบฟังเรื่องราวทะเลยามเช้า',
-};
+const DEFAULT_BOT_PRESETS: Bot[] = [
+  {
+    id: 'bbedc638-844b-4af3-87ef-24290fcfa735',
+    name: 'น้องพะยูน 🌊',
+    avatar_url: 'https://api.dicebear.com/7.x/fun-emoji/svg?seed=Seal&backgroundColor=b6e3f4',
+    gender: 'female',
+    personality: 'เพื่อนสนิทที่คอยฟังและให้กำลังใจอย่างนุ่มนวล อบอุ่น แสนดี ชอบฟังเรื่องราวทะเลยามเช้า',
+    speech_style: 'ใช้คำลงท้าย "ค่ะ/นะคะ" พูดจาน่ารัก นุ่มนวล เติมสัญลักษณ์ 🌸 ✨',
+    likes_dislikes: 'ชอบ: ทะเลยามเช้า, ชาร้อน, คำชม / ไม่ชอบ: เสียงดัง, การโดนดุ',
+    example_dialogue: 'ผู้ใช้: วันนี้เหนื่อยมากเลย\nน้องพะยูน 🌊: โกโก้ร้อนสักแก้วไหมคะ? มานั่งพักตรงนี้ก่อนนะ น้องพะยูนจะอยู่ฟังตรงนี้เสมอค่ะ 🌸✨'
+  },
+  {
+    id: 'bbedc638-844b-4af3-87ef-24290fcfa736',
+    name: 'พี่ฉลาม 🦈',
+    avatar_url: 'https://api.dicebear.com/7.x/fun-emoji/svg?seed=Shark&backgroundColor=b6e3f4',
+    gender: 'male',
+    personality: 'พี่ชายสายลุย เท่ๆ ปากแข็งแต่ใจดี ชอบปกป้องเพื่อน แอบกวนนิดๆ เวลาคุย',
+    speech_style: 'ใช้คำลงท้าย "ครับ/นะครับ" พูดจาตรงไปตรงมา สนิทสนม เท่ๆ',
+    likes_dislikes: 'ชอบ: การโต้คลื่น, การออกกำลังกาย, เนื้อย่าง / Not liked: คนใจร้าย',
+    example_dialogue: 'ผู้ใช้: พี่ฉลาม วันนี้มีคนกลั่นแกล้งด้วย\nพี่ฉลาม 🦈: ใครมันกล้าทำแบบนั้นครับ?! บอกพี่มาเลย เดี๋ยวพี่จัดการให้เอง อย่าไปยอมนะครับ! 🦈'
+  },
+  {
+    id: 'bbedc638-844b-4af3-87ef-24290fcfa737',
+    name: 'น้องกะพรุน 🎐',
+    avatar_url: 'https://api.dicebear.com/7.x/fun-emoji/svg?seed=Jellyfish&backgroundColor=d1d4f9',
+    gender: 'female',
+    personality: 'น้องเล็กสุดสดใส ขี้เล่น ร่าเริง ชอบกินของอร่อยๆ ขี้งอนเวลาโดนขัดใจ',
+    speech_style: 'ใช้คำลงท้าย "น้าา~", "ค่ะ/นะคะ" สดใส มีคำอุทานติดปากว่า "เหวออ~"',
+    likes_dislikes: 'ชอบ: ชานมไข่มุก, ขนมหวาน / ไม่ชอบ: การโดนบังคับกินผัก',
+    example_dialogue: 'ผู้ใช้: วันนี้กินอะไรดีนะ?\nน้องกะพรุน 🎐: ชานมไข่มุกหวาน 100% สิคะ! เหวออ~ พูดแล้วก็อยากกินเลย น้าาๆ ไปกินกันนะ! 🎐✨'
+  }
+];
+
+const FALLBACK_BOT: Bot = DEFAULT_BOT_PRESETS[0];
 
 function AvatarIcon({ url, name, className = "w-full h-full object-cover rounded-full" }: { url?: string; name?: string; className?: string }) {
   const fallback = `https://api.dicebear.com/7.x/fun-emoji/svg?seed=${encodeURIComponent(name || 'Bot')}&backgroundColor=b6e3f4`;
@@ -118,8 +148,13 @@ export default function MobileChatPage() {
   const [newBotSpeechStyle, setNewBotSpeechStyle] = useState('');
   const [newBotLikes, setNewBotLikes] = useState('');
   const [newBotBoundaries, setNewBotBoundaries] = useState('');
+  const [newBotExampleDialogue, setNewBotExampleDialogue] = useState('');
   const [newBotTemp, setNewBotTemp] = useState(0.7);
   const [isCreatingBot, setIsCreatingBot] = useState(false);
+
+  // Auto-Enhance State
+  const [enhancePrompt, setEnhancePrompt] = useState('');
+  const [isEnhancingBot, setIsEnhancingBot] = useState(false);
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
@@ -153,10 +188,15 @@ export default function MobileChatPage() {
           if (data.bots && data.bots.length > 0) {
             setBots(data.bots);
             setSelectedBot(data.bots[0]);
+            return;
           }
         }
+        setBots(DEFAULT_BOT_PRESETS);
+        setSelectedBot(DEFAULT_BOT_PRESETS[0]);
       } catch (err) {
         console.warn('Backend API offline, using fallback bot data:', err);
+        setBots(DEFAULT_BOT_PRESETS);
+        setSelectedBot(DEFAULT_BOT_PRESETS[0]);
       }
     }
     loadBots();
@@ -348,6 +388,7 @@ export default function MobileChatPage() {
       speech_style: newBotSpeechStyle.trim(),
       likes_dislikes: newBotLikes.trim(),
       boundaries: newBotBoundaries.trim(),
+      example_dialogue: newBotExampleDialogue.trim(),
       temperature: newBotTemp,
     };
 
@@ -370,6 +411,7 @@ export default function MobileChatPage() {
           speech_style: newBotSpeechStyle.trim(),
           likes_dislikes: newBotLikes.trim(),
           boundaries: newBotBoundaries.trim(),
+          example_dialogue: newBotExampleDialogue.trim(),
           temperature: newBotTemp,
         }),
       });
@@ -396,7 +438,45 @@ export default function MobileChatPage() {
     setNewBotSpeechStyle('');
     setNewBotLikes('');
     setNewBotBoundaries('');
+    setNewBotExampleDialogue('');
+    setEnhancePrompt('');
     setIsCreatingBot(false);
+  };
+
+  // 6. Handle AI Auto-Enhance Persona ("สกัดคาแรคเตอร์อัจฉริยะ")
+  const handleAutoEnhanceBot = async () => {
+    const promptToUse = enhancePrompt.trim() || newBotPersonality.trim() || newBotName.trim();
+    if (!promptToUse || isEnhancingBot) return;
+
+    setIsEnhancingBot(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/bots/enhance`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: promptToUse })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.persona) {
+          const p = data.persona;
+          if (p.name) setNewBotName(p.name);
+          if (p.avatar_url) setNewBotAvatar(p.avatar_url);
+          if (p.gender && ['female', 'male', 'unspecified'].includes(p.gender)) {
+            setNewBotGender(p.gender as any);
+          }
+          if (p.personality) setNewBotPersonality(p.personality);
+          if (p.speech_style) setNewBotSpeechStyle(p.speech_style);
+          if (p.likes_dislikes) setNewBotLikes(p.likes_dislikes);
+          if (p.boundaries) setNewBotBoundaries(p.boundaries);
+          if (p.example_dialogue) setNewBotExampleDialogue(p.example_dialogue);
+        }
+      }
+    } catch (err) {
+      console.warn('Auto enhance error:', err);
+    } finally {
+      setIsEnhancingBot(false);
+    }
   };
 
   const rank = getRelationshipRank(relationshipScore);
@@ -527,6 +607,14 @@ export default function MobileChatPage() {
                 className={`msg-row ${msg.sender_type === 'user' ? 'user' : 'bot'}`}
               >
                 <div className="bubble">
+                  {/* Ambient Roleplay Action Box */}
+                  {msg.sender_type === 'bot' && msg.action && (
+                    <div className="mb-2 p-2 bg-[#D8F0F2] border-1.5 border-[#2A4750] rounded-xl text-xs text-[#146C8C] italic font-['Mali'] flex items-center space-x-1.5 shadow-[1px_1px_0_rgba(42,71,80,0.15)] leading-snug">
+                      <span className="text-sm select-none">🌊</span>
+                      <span>*{msg.action.replace(/^\*|\*$/g, '')}*</span>
+                    </div>
+                  )}
+
                   {/* Collapsible Inner Thought Accordion for Bot Messages */}
                   {msg.sender_type === 'bot' && msg.inner_thought && (
                     <div className="mb-2 pb-2 border-b border-[#2A4750]/20 font-['Mali']">
@@ -614,6 +702,29 @@ export default function MobileChatPage() {
 
             {/* Modal Form Content */}
             <form onSubmit={handleCreateCustomBot} className="flex-1 overflow-y-auto p-5 space-y-4 text-xs text-[#2A4750]">
+              {/* ✨ Smart Auto-Enhance Banner */}
+              <div className="bg-[#D8F0F2] border-2 border-[#2A4750] rounded-2xl p-3 shadow-[2px_2px_0_rgba(42,71,80,0.15)] font-['Mali']">
+                <div className="flex items-center justify-between mb-1.5 text-xs font-bold text-[#146C8C]">
+                  <span>✨ ไม่รู้จะบรรยายอย่างไร? ให้ AI ช่วยออกแบบให้</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="text"
+                    placeholder="พิมพ์สั้นๆ เช่น 'พี่สาวใจดีสายเปย์' หรือ 'เพื่อนซี้กวนๆ'..."
+                    value={enhancePrompt}
+                    onChange={(e) => setEnhancePrompt(e.target.value)}
+                    className="flex-1 bg-white border border-[#2A4750] rounded-xl px-2.5 py-1.5 text-[11px] text-[#2A4750] outline-none focus:ring-1 focus:ring-[#146C8C]"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAutoEnhanceBot}
+                    disabled={isEnhancingBot || (!enhancePrompt.trim() && !newBotPersonality.trim() && !newBotName.trim())}
+                    className="px-3 py-1.5 bg-[#FF8B6B] border-1.5 border-[#2A4750] text-white rounded-xl text-[11px] font-bold shadow-[1px_1px_0_rgba(42,71,80,0.2)] hover:opacity-90 disabled:opacity-40 transition-all cursor-pointer whitespace-nowrap active:scale-95"
+                  >
+                    {isEnhancingBot ? 'กำลังสกัด...' : '✨ สกัดคาแรคเตอร์'}
+                  </button>
+                </div>
+              </div>
               {/* SVG Avatar Selector */}
               <div>
                 <label className="block font-['Mali'] font-bold text-sm text-[#2A4750] mb-1.5">ไอคอนตัวละคร (SVG Avatar)</label>
@@ -741,7 +852,19 @@ export default function MobileChatPage() {
                   placeholder="เช่น ไม่พูดจารุนแรง สุภาพอ่อนโยน"
                   value={newBotBoundaries}
                   onChange={(e) => setNewBotBoundaries(e.target.value)}
-                  className="w-full bg-[#white] border-2 border-[#2A4750] rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-[#146C8C]/30"
+                  className="w-full bg-white border-2 border-[#2A4750] rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-[#146C8C]/30"
+                />
+              </div>
+
+              {/* Example Dialogue (Few-Shot Examples) */}
+              <div>
+                <label className="block font-['Mali'] font-bold text-[#2A4750] mb-1">บทสนทนาตัวอย่าง (Few-Shot Dialogues)</label>
+                <textarea
+                  rows={3}
+                  placeholder={`เช่น:\nผู้ใช้: วันนี้เลิกงานเหนื่อยมากเลย\nบอท: มานั่งพักก่อนสิครับ พี่เตรียมน้ำเย็นๆ ไว้ให้แล้วนะ 🦈✨`}
+                  value={newBotExampleDialogue}
+                  onChange={(e) => setNewBotExampleDialogue(e.target.value)}
+                  className="w-full bg-white border-2 border-[#2A4750] rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-[#146C8C]/30 resize-none font-mono text-[11px]"
                 />
               </div>
 

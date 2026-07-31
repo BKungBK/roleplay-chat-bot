@@ -28,29 +28,34 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { name, avatar_url, gender, personality, speech_style, likes_dislikes, boundaries, temperature } = body;
+    const { name, avatar_url, gender, personality, speech_style, likes_dislikes, boundaries, example_dialogue, temperature } = body;
 
     if (!name || !personality) {
       return NextResponse.json({ error: 'Name and personality are required' }, { status: 400 });
     }
 
-    const compiledPrompt = compileSystemPrompt({ name, gender, personality, speech_style, likes_dislikes, boundaries });
+    const compiledPrompt = compileSystemPrompt({ name, gender, personality, speech_style, likes_dislikes, boundaries, example_dialogue });
     const supabase = getSupabaseAdmin();
+
+    const insertData: Record<string, any> = {
+      user_id: activeUser.id,
+      name,
+      avatar_url: avatar_url || `https://api.dicebear.com/7.x/fun-emoji/svg?seed=${encodeURIComponent(name)}`,
+      gender: gender || 'unspecified',
+      personality,
+      speech_style,
+      likes_dislikes,
+      boundaries,
+      system_prompt: compiledPrompt,
+      temperature: temperature ?? 0.7
+    };
+    if (example_dialogue) {
+      insertData.example_dialogue = example_dialogue;
+    }
 
     const { data, error } = await supabase
       .from('bots')
-      .insert({
-        user_id: activeUser.id,
-        name,
-        avatar_url: avatar_url || `https://api.dicebear.com/7.x/fun-emoji/svg?seed=${encodeURIComponent(name)}`,
-        gender: gender || 'unspecified',
-        personality,
-        speech_style,
-        likes_dislikes,
-        boundaries,
-        system_prompt: compiledPrompt,
-        temperature: temperature ?? 0.7
-      })
+      .insert(insertData)
       .select()
       .single();
 

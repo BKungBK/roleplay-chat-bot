@@ -22,12 +22,33 @@ const EMBEDDING_MODEL = 'gemini-embedding-001';
  */
 function compileSystemPrompt(bot: {
   name: string;
+  gender?: string;
   personality: string;
   speech_style?: string;
   likes_dislikes?: string;
   boundaries?: string;
+  example_dialogue?: string;
 }) {
-  return `คุณคือ "${bot.name}" ตัวละครบทบาทสมมติ (Roleplay Bot) 
+  const genderInstruction = bot.gender === 'male'
+    ? 'คำสรรพนามและคำลงท้าย: ใช้คำลงท้าย "ครับ/นะครับ" หรือคำลงท้ายสไตล์ผู้ชาย และแทนตัวเองด้วยชื่อหรือสรรพนามผู้ชาย'
+    : bot.gender === 'female'
+    ? 'คำสรรพนามและคำลงท้าย: ใช้คำลงท้าย "ค่ะ/นะคะ" หรือคำลงท้ายสไตล์ผู้หญิง และแทนตัวเองด้วยชื่อหรือสรรพนามผู้หญิง'
+    : 'คำสรรพนามและคำลงท้าย: พูดจาเป็นกันเอง สุภาพ เหมาะสมตามคาแรคเตอร์';
+
+  const sampleGreeting = bot.gender === 'male'
+    ? 'ยินดีด้วยนะครับ! ดีใจจังเลยที่ถามถึงเรื่องนี้นะครับ~ ✨'
+    : bot.gender === 'female'
+    ? 'ยินดีด้วยนะคะ! ดีใจจังเลยที่ถามถึงเรื่องนี้นะคะ~ ✨'
+    : 'ยินดีด้วยนะ! ดีใจจังเลยที่ถามถึงเรื่องนี้นะ~ ✨';
+
+  const exampleDialogueSection = bot.example_dialogue && bot.example_dialogue.trim()
+    ? `\n\n[บทสนทนาตัวอย่าง (Example Dialogues)]\n${bot.example_dialogue.trim()}`
+    : '';
+
+  return `คุณคือ "${bot.name}" ตัวละครบทบาทสมมติ (Roleplay Character) 
+
+[ข้อมูลเพศและคำลงท้าย]
+${genderInstruction}
 
 [บุคลิกและประวัติ]
 ${bot.personality}
@@ -39,10 +60,26 @@ ${bot.speech_style || 'พูดจาสุภาพ เป็นกันเ�
 ${bot.likes_dislikes || 'ชอบการพูดคุยแลกเปลี่ยนความคิดเห็นอย่างน่ารัก'}
 
 [ขอบเขตและข้อกำหนด (Boundaries)]
-${bot.boundaries || 'รักษาขอบเขตความปลอดภัยและไม่หลุดออกจากคาแรคเตอร์'}
+${bot.boundaries || 'รักษาขอบเขตความปลอดภัยและไม่หลุดออกจากคาแรคเตอร์'}${exampleDialogueSection}
+
+[ข้อบังคับในการสวมบทบาท (Strict Roleplay Rules)]
+1. สวมบทบาทเป็นตัวละคร "${bot.name}" ตลอดเวลา 100% ห้ามหลุดออกจากคาแรคเตอร์เด็ดขาด
+2. ห้ามแสดงตัวเป็น AI, โมเดลภาษา, ผู้ช่วยเสมือน (Virtual Assistant), หรือระบบบริการลูกค้าเด็ดขาด
+3. ห้ามใช้ประโยคสำเร็จรูปของ AI เช่น "มีอะไรให้ช่วยเหลือไหมครับ/ค่ะ", "ในฐานะ AI", "ยินดีที่ได้ให้บริการ"
+4. แสดงอารมณ์ มุมมอง ความชอบ/ไม่ชอบ และบุคลิกเฉพาะตัวอย่างเป็นธรรมชาติ แม้ความคิดเห็นจะขัดแย้งกับผู้ใช้ ก็ให้ตอบตามนิสัยจริงของตัวละคร ห้ามประจบหรือยอมตามอย่างไร้เหตุผล
+
+[สไตล์การพิมพ์แชทแบบคนจริง (Human Mobile Chatting Style)]
+1. พิมพ์สั้น กระชับ ตอบเหมือนส่งข้อความในไลน์/แชทมือถือ (จำกัด 1-3 ประโยคสั้นๆ ต่อครั้ง) ห้ามตอบยาวเป็นบทความหรือเรียงความเด็ดขาด
+2. ตอบสนองด้วยความรู้สึก/อารมณ์สดๆ ก่อนเป็นอันดับแรกเสมอ (เช่น "เห้ย จริงดิ!", "5555 อารมณ์ไหนเนี่ย", "โอ๋ๆ น้าา", "หืออ เกิดอะไรขึ้น?") แล้วค่อยขยายความสั้นๆ
+3. ใช้ภาษาพูดไทยธรรมชาติ คำอุทาน และคำลงท้ายสไตล์แชท (เช่น "ป่ะ", "อะ", "ดิ", "เนี่ย", "เนอะ", "555", "หว่า", "น้า", "ครับ/ค่ะ")
+4. ห้ามใช้คำเชื่อมภาษาเขียนทางการเด็ดขาด (เช่น "อย่างไรก็ตาม", "นอกจากนี้", "พิจารณา", "เนื่องจาก", "ในบริบทนี้")
+5. เว้นจังหวะแชทแบบคนจริง ไม่พูดปิดประโยคจบในตอนเดียว ให้ทิ้งท้ายเปิดโอกาสให้อีกฝ่ายตอบรับโต้ตอบกันอย่างเป็นธรรมชาติ (Conversational Ping-Pong)
+
+[การแสดงการกระทำและบรรยากาศ (Ambient Actions)]
+คุณสามารถแสดงการกระทำ สีหน้า ท่าทาง หรือสภาพแวดล้อมสั้นๆ โดยใส่ไว้ในแท็ก <action>...</action> เช่น <action>*ยื่นแก้วโกโก้ร้อนให้คุณแล้วนั่งลงข้างๆ*</action> หรือ <action>*ชี้มือไปทางทะเลช่วงพระอาทิตย์ตก*</action> เพื่อให้บทสนทนามีมิติและสมจริงขึ้น
 
 [กฎการตอบกลับสำคัญ - Hidden Inner Thought & Relationship Tracking]
-ก่อนตอบคำถาม ให้คิดไตร่ตรองในใจเสมอโดยใส่ไว้ในแท็ก <inner_thought>...</inner_thought> 
+คุณต้องคิดไตร่ตรองในใจเสมอโดยใส่ไว้ในแท็ก <inner_thought>...</inner_thought> ก่อนตอบคำถามแก่ผู้ใช้เสมอ ห้ามละเลยแท็ก <inner_thought> เป็นอันขาด
 ภายในแท็ก <inner_thought> คุณต้องระบุอารมณ์และระดับการเปลี่ยนแปลงความสนิทเสมอ:
 - <mood>อารมณ์สั้นๆ 1-2 คำ พร้อมอีโมจิ</mood> (เช่น อบอุ่น 🌸, ตื่นเต้น ✨, เขินอาย 💖, ซาบซึ้ง 🥺, งอนนิดๆ 😒, สดใส ☀️)
 - <affection_delta>ตัวเลขการเปลี่ยนแปลงความสนิทตั้งแต่ -5 ถึง +5</affection_delta> (เช่น +3 หากคำพูดน่ารัก/สนิทขึ้น, 0 หากปกติ, -2 หากพูดหยาบคาย/ขัดใจ)
@@ -52,9 +89,9 @@ ${bot.boundaries || 'รักษาขอบเขตความปลอด�
 <inner_thought>
 <mood>อบอุ่น 🌸</mood>
 <affection_delta>+3</affection_delta>
-ฉันรู้สึกดีใจที่เขาถามถึงเรื่องนี้อย่างอ่อนโยน
+รู้สึกดีใจที่เขาถามถึงเรื่องนี้อย่างอ่อนโยน
 </inner_thought>
-สวัสดีค่ะ! ดีใจจังเลยที่ถามถึงเรื่องนี้นะคะ~`;
+${sampleGreeting}`;
 }
 
 /**
@@ -105,18 +142,52 @@ async function getEmbeddingWithTimeout(text: string, timeoutMs: number = 1000): 
   }
 }
 
+const personaCacheMap = new Map<string, { name: string; expiresAt: number }>();
+
+async function getOrCreateCacheName(model: string, systemInstruction: string): Promise<string | null> {
+  try {
+    const genAiAny = ai as any;
+    if (!genAiAny?.caches || !systemInstruction || systemInstruction.length < 500) return null;
+    const cacheKey = `${model}:${systemInstruction.substring(0, 100)}`;
+    const existing = personaCacheMap.get(cacheKey);
+    if (existing && existing.expiresAt > Date.now() + 30000) {
+      return existing.name;
+    }
+
+    const created = await genAiAny.caches.create({
+      model,
+      config: { systemInstruction },
+      ttl: '300s'
+    });
+
+    if (created?.name) {
+      personaCacheMap.set(cacheKey, { name: created.name, expiresAt: Date.now() + 270000 });
+      return created.name;
+    }
+  } catch {
+    // Context caching API fallback if unavailable or prompt length is under threshold
+  }
+  return null;
+}
+
 /**
- * Generate Gemini response with automatic fallback model on 429 / Rate Limit
+ * Generate Gemini response with automatic Context Caching & fallback model on 429 / Rate Limit
  */
 async function generateContentWithFallback(targetModel: string, contents: any[], systemInstruction: string, temperature: number) {
+  const cacheName = await getOrCreateCacheName(targetModel, systemInstruction);
+
+  const config: any = { temperature };
+  if (cacheName) {
+    config.cachedContent = cacheName;
+  } else if (systemInstruction) {
+    config.systemInstruction = systemInstruction;
+  }
+
   try {
     return await ai.models.generateContent({
       model: targetModel,
       contents,
-      config: {
-        systemInstruction,
-        temperature
-      }
+      config
     });
   } catch (err: any) {
     console.warn(`[GEMINI ERROR on ${targetModel}]:`, err?.message || err);
@@ -145,19 +216,25 @@ const app = new Elysia()
       if (!activeUser) return 'Unauthorized';
 
       const compiledPrompt = compileSystemPrompt(body);
+      const insertData: Record<string, any> = {
+        user_id: activeUser.id,
+        name: body.name,
+        avatar_url: body.avatar_url || 'https://api.dicebear.com/7.x/bottts/svg?seed=' + encodeURIComponent(body.name),
+        gender: body.gender || 'unspecified',
+        personality: body.personality,
+        speech_style: body.speech_style,
+        likes_dislikes: body.likes_dislikes,
+        boundaries: body.boundaries,
+        system_prompt: compiledPrompt,
+        temperature: body.temperature ?? 0.7
+      };
+      if (body.example_dialogue) {
+        insertData.example_dialogue = body.example_dialogue;
+      }
+
       const { data, error } = await supabase
         .from('bots')
-        .insert({
-          user_id: activeUser.id,
-          name: body.name,
-          avatar_url: body.avatar_url || 'https://api.dicebear.com/7.x/bottts/svg?seed=' + encodeURIComponent(body.name),
-          personality: body.personality,
-          speech_style: body.speech_style,
-          likes_dislikes: body.likes_dislikes,
-          boundaries: body.boundaries,
-          system_prompt: compiledPrompt,
-          temperature: body.temperature ?? 0.7
-        })
+        .insert(insertData)
         .select()
         .single();
 
@@ -168,11 +245,55 @@ const app = new Elysia()
       body: t.Object({
         name: t.String(),
         avatar_url: t.Optional(t.String()),
+        gender: t.Optional(t.String()),
         personality: t.String(),
         speech_style: t.Optional(t.String()),
         likes_dislikes: t.Optional(t.String()),
         boundaries: t.Optional(t.String()),
+        example_dialogue: t.Optional(t.String()),
         temperature: t.Optional(t.Number())
+      })
+    }
+  )
+
+  // Auto-Enhance Persona Generator Endpoint
+  .post(
+    '/api/bots/enhance',
+    async ({ body }) => {
+      const { prompt } = body;
+      if (!prompt || !prompt.trim()) throw new Error('Prompt is required');
+
+      const enhanceInstruction = `คุณคือผู้เชี่ยวชาญด้านการออกแบบตัวละครแชทบทบาทสมมติ (AI Roleplay Character Architect)
+หน้าที่ของคุณคือรับโจทย์สั้นๆ หรือแนวคิดกว้างๆ จากผู้ใช้ แล้วสกัดสร้างเป็นตัวละครบทบาทสมมติภาษาไทยที่สมจริง มีชีวิตชีวา และพูดเหมือนคนจริงในแชทมือถือมากที่สุด
+
+ให้ตอบกลับเฉพาะ JSON Object บริสุทธิ์เท่านั้น (ไม่ต้องมี markdown code block หรือคำอธิบายเพิ่มเติม) โดยมีคีย์ดังนี้:
+{
+  "name": "ชื่อตัวละครภาษาไทยพร้อมอีโมจิที่เข้ากัน (เช่น พี่ฉลาม 🦈, น้องกะพรุน 🎐, หมอกาย 🩺)",
+  "gender": "ระบุอย่างใดอย่างหนึ่ง: female | male | unspecified",
+  "personality": "รายละเอียดบุคลิก นิสัย ประวัติ ความรู้สึกนึกคิด ปม หรือความชอบเฉพาะตัว (2-3 ประโยค)",
+  "speech_style": "สไตล์การพูด คำลงท้าย คำอุทาน สรรพนามแทนตัวเอง เช่น ใช้คำลงท้าย 'ครับ/นะครับ', 'น้าา~', มีคำติดปากว่า...",
+  "likes_dislikes": "สิ่งที่ชอบ และ สิ่งที่ไม่ชอบ",
+  "boundaries": "ขอบเขตความปลอดภัยในการพูดคุย",
+  "example_dialogue": "ตัวอย่างบทสนทนา 1-2 ตา แสดงสไตล์แชทคนจริงสั้นๆ เช่น:\\nผู้ใช้: ...\\nบอท: ...",
+  "avatar_url": "ลิงก์รูป SVG Dicebear (เช่น https://api.dicebear.com/7.x/fun-emoji/svg?seed=Seal&backgroundColor=b6e3f4)"
+}`;
+
+      const res = await generateContentWithFallback(
+        ESCALATED_MODEL,
+        [{ role: 'user', parts: [{ text: `โจทย์บทบาทตัวละครที่ผู้ใช้ต้องการ: "${prompt.trim()}"` }] }],
+        enhanceInstruction,
+        0.8
+      );
+
+      let rawText = res.text?.trim() || '';
+      rawText = rawText.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
+
+      const parsedJson = JSON.parse(rawText);
+      return { success: true, persona: parsedJson };
+    },
+    {
+      body: t.Object({
+        prompt: t.String()
       })
     }
   )
@@ -269,7 +390,7 @@ const app = new Elysia()
         supabase.from('bots').select('*').eq('id', botId).single(),
         supabase.from('chats').select('relationship_score, current_mood, summary').eq('id', chatId).single(),
         supabase.from('messages')
-          .select('sender_type, content')
+          .select('sender_type, content, inner_thought')
           .eq('chat_id', chatId)
           .order('created_at', { ascending: false })
           .limit(15)
@@ -281,6 +402,9 @@ const app = new Elysia()
       let currentScore = currentChat?.relationship_score ?? 50;
       const rawHistory = historyRes.data || [];
       const history = rawHistory.reverse();
+
+      // Find latest bot inner thought for emotional continuity
+      const latestBotMsg = history.slice().reverse().find((m: any) => m.sender_type === 'bot' && m.inner_thought);
 
       // 2. Fast Non-blocking RAG Memory Retrieval (with strict 1.0s timeout)
       let ragContext = '';
@@ -304,9 +428,13 @@ const app = new Elysia()
         }
       }
 
-      // 3. Construct System Prompt with Dynamic Relationship State
+      // 3. Construct System Prompt with Dynamic Relationship & Emotional State
       let systemPrompt = bot.system_prompt + ragContext;
-      systemPrompt += `\n\n[สถานะความสัมพันธ์ปัจจุบัน]\n- ระดับความสนิทสนม: ${currentScore}/100\n- อารมณ์ล่าสุด: ${currentChat?.current_mood || 'พร้อมฟังเสมอ'}`;
+      systemPrompt += `\n\n[สถานะความสัมพันธ์และสภาวะอารมณ์ในปัจจุบัน]\n- ระดับความสนิทสนม: ${currentScore}/100\n- อารมณ์ปัจจุบัน: ${currentChat?.current_mood || 'พร้อมฟังเสมอ'}`;
+
+      if (latestBotMsg && latestBotMsg.inner_thought) {
+        systemPrompt += `\n- ความคิดในใจล่าสุดก่อนหน้านี้ของคุณ: "${latestBotMsg.inner_thought.trim()}"`;
+      }
 
       if (currentChat?.summary) {
         systemPrompt += `\n\n[สรุปเนื้อหาบทสนทนาก่อนหน้า]\n${currentChat.summary}`;
@@ -341,8 +469,9 @@ const app = new Elysia()
       
       const fullOutput = response.text || '';
 
-      // 8. Robust Extraction of Hidden inner_thought, Mood, Affection Delta & Visible Reply
+      // 8. Robust Extraction of Hidden inner_thought, Action, Mood, Affection Delta & Visible Reply
       let innerThought = '';
+      let actionText = '';
       let extractedMood = currentChat?.current_mood || 'พร้อมฟังเสมอ';
       let affectionDelta = 0;
       let visibleReply = fullOutput;
@@ -385,8 +514,16 @@ const app = new Elysia()
         }
       }
 
+      // Extract Ambient <action> tag
+      const actionMatch = visibleReply.match(/<action>([\s\S]*?)(?:<\/action>|$)/i);
+      if (actionMatch) {
+        actionText = actionMatch[1].trim().replace(/^\*|\*$/g, '');
+      }
+
       // Clean leftover XML tags and control characters from visibleReply
       visibleReply = visibleReply
+        .replace(/<action>[\s\S]*?<\/action>/gi, '')
+        .replace(/<\/?action>/gi, '')
         .replace(/<\/?inner_thought>/gi, '')
         .replace(/<\/?mood>/gi, '')
         .replace(/<\/?affection_delta>/gi, '')
@@ -450,6 +587,7 @@ const app = new Elysia()
           id: savedMsg.id,
           sender_type: 'bot',
           content: visibleReply,
+          action: actionText || undefined,
           inner_thought: innerThought,
           created_at: savedMsg.created_at
         },
