@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { supabase } from '@/lib/supabase';
 
 interface Message {
   id: string;
@@ -22,6 +23,9 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 export default function MobileChatPage() {
   const [bots, setBots] = useState<Bot[]>([]);
   const [selectedBot, setSelectedBot] = useState<Bot | null>(null);
+  const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const [authToken, setAuthToken] = useState<string | null>(null);
+
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 'welcome-msg',
@@ -35,7 +39,24 @@ export default function MobileChatPage() {
   const [modelUsed, setModelUsed] = useState<string>('gemini-2.5-flash-lite');
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // Fetch Bots from Backend Server
+  // 1. Initialize Supabase Auth Session
+  useEffect(() => {
+    async function initAuth() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        setAuthToken(session.access_token);
+      } else {
+        // Sign in anonymously if no session exists
+        const { data: authRes } = await supabase.auth.signInAnonymously();
+        if (authRes.session) {
+          setAuthToken(authRes.session.access_token);
+        }
+      }
+    }
+    initAuth();
+  }, []);
+
+  // 2. Fetch Available Bots
   useEffect(() => {
     async function loadBots() {
       try {
@@ -62,13 +83,51 @@ export default function MobileChatPage() {
     loadBots();
   }, []);
 
+  // 3. Create Real Chat Session when Selected Bot changes (Issue #1 Fix)
+  useEffect(() => {
+    async function createOrInitChat() {
+      if (!selectedBot || !authToken) return;
+
+      try {
+        const res = await fetch(`${API_BASE}/api/chats`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`,
+          },
+          body: JSON.stringify({ botId: selectedBot.id }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data.chatId) {
+            setActiveChatId(data.chatId);
+            setMessages([
+              {
+                id: `welcome-${Date.now()}`,
+                sender_type: 'bot',
+                content: `สวัสดีค่ะ! คุณกำลังคุยกับ ${selectedBot.name} อยู่ในขณะนี้นะคะ ✨`,
+                created_at: new Date().toISOString(),
+              },
+            ]);
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to create real chat row:', err);
+      }
+    }
+
+    createOrInitChat();
+  }, [selectedBot, authToken]);
+
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
 
+  // 4. Send Message using Real chatId UUID and Auth Bearer Token
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!inputMessage.trim() || isLoading || !selectedBot) return;
+    if (!inputMessage.trim() || isLoading || !selectedBot || !activeChatId || !authToken) return;
 
     const userText = inputMessage.trim();
     const userMsg: Message = {
@@ -83,12 +142,15 @@ export default function MobileChatPage() {
     setIsLoading(true);
 
     try {
-      // Call Live Elysia + Gemini Server
+      // Call Live Elysia Server with Auth Token & Real Chat UUID
       const res = await fetch(`${API_BASE}/api/chat`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`,
+        },
         body: JSON.stringify({
-          chatId: 'active-user-session',
+          chatId: activeChatId,
           botId: selectedBot.id,
           message: userText,
         }),
@@ -102,7 +164,7 @@ export default function MobileChatPage() {
         setModelUsed(data.model_used);
       }
     } catch {
-      // Direct Fallback Preview
+      // Fallback preview
       setTimeout(() => {
         const botReply: Message = {
           id: `bot-${Date.now()}`,
@@ -203,7 +265,7 @@ export default function MobileChatPage() {
         <div ref={chatEndRef} />
       </main>
 
-      {/* 📥 Bottom Anchored Input Bar (Touch Target >= 44px, Safe Padding) */}
+      {/* 📥 Bottom Anchored Input Bar */}
       <footer className="bg-white/95 border-t border-sky-100 p-3 safe-bottom-padding z-10 shadow-lg">
         <form onSubmit={handleSendMessage} className="flex items-center space-x-2">
           <input
@@ -215,7 +277,7 @@ export default function MobileChatPage() {
           />
           <button
             type="submit"
-            disabled={!inputMessage.trim() || isLoading}
+            disabled={!inputMessage.trim() || isLoading || !activeChatId}
             className="min-h-[44px] min-w-[44px] px-4 py-2 bg-gradient-to-r from-sky-500 to-teal-500 text-white font-semibold text-sm rounded-2xl flex items-center justify-center hover:opacity-90 disabled:opacity-40 transition-all shadow-md cursor-pointer active:scale-95"
           >
             ส่ง ✨

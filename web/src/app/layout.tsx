@@ -2,8 +2,8 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Ocean Roleplay Chat — แชทบอทบทบาทสมมติ AI',
-  description: 'แชทบอทบทบาทสมมติ AI สไตล์นุ่มนวล อบอุ่น ฟีลลิ่งธรรมชาติทะเล เน้นใช้งานมือถือเป็นหลัก',
+  title: 'Ocean Chat — คุยกับเพื่อน AI',
+  description: 'แชทบอทตัวละคร AI สไตล์ Ocean Sketchbook อบอุ่น นุ่มนวล คุยสนุกแบบมีตัวตน',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
@@ -18,7 +18,7 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: 'cover',
-  themeColor: '#e0f2fe',
+  themeColor: '#D8F0F2',
 };
 
 export default function RootLayout({
@@ -32,11 +32,11 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
-          href="https://fonts.googleapis.com/css2?family=Mali:wght@500;600;700&family=Quicksand:wght@500;600;700&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Mali:ital,wght@0,400;0,600;0,700;1,400&family=Sarabun:wght@400;500;600&display=swap"
           rel="stylesheet"
         />
       </head>
-      <body className="antialiased min-h-screen flex flex-col selection:bg-teal-100">
+      <body className="antialiased" style={{ display: 'flex', flexDirection: 'column', height: '100dvh', overflow: 'hidden' }}>
         {children}
       </body>
     </html>
