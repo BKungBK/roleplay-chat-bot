@@ -57,8 +57,8 @@ function getRelationshipRank(score: number): { name: string; icon: string; color
 }
 
 export default function MobileChatPage() {
-  const [bots, setBots] = useState<Bot[]>([]);
-  const [selectedBot, setSelectedBot] = useState<Bot | null>(null);
+  const [bots, setBots] = useState<Bot[]>([FALLBACK_BOT]);
+  const [selectedBot, setSelectedBot] = useState<Bot | null>(FALLBACK_BOT);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [authToken, setAuthToken] = useState<string | null>(null);
   const initializedBotIdRef = useRef<string | null>(null);
@@ -81,11 +81,6 @@ export default function MobileChatPage() {
   const [newBotBoundaries, setNewBotBoundaries] = useState('');
   const [newBotTemp, setNewBotTemp] = useState(0.7);
   const [isCreatingBot, setIsCreatingBot] = useState(false);
-
-  const [isMounted, setIsMounted] = useState(false);
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
 
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -127,13 +122,9 @@ export default function MobileChatPage() {
             setBots(data.bots);
             setSelectedBot(data.bots[0]);
           }
-        } else {
-          throw new Error('API response not ok');
         }
       } catch (err) {
         console.warn('Backend API offline, using fallback bot data:', err);
-        setBots([FALLBACK_BOT]);
-        setSelectedBot(FALLBACK_BOT);
       }
     }
     loadBots();
@@ -181,12 +172,11 @@ export default function MobileChatPage() {
   }, [selectedBot?.id, authToken]);
 
   useEffect(() => {
-    if (!isMounted) return;
     const timer = setTimeout(() => {
       chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, 100);
     return () => clearTimeout(timer);
-  }, [messages.length, isLoading, isMounted]);
+  }, [messages.length, isLoading]);
 
   // Helper to ensure chat session exists before sending
   const getOrCreateChatId = async (): Promise<string | null> => {
@@ -327,17 +317,6 @@ export default function MobileChatPage() {
 
   const rank = getRelationshipRank(relationshipScore);
 
-  if (!isMounted) {
-    return (
-      <div className="page-shell bg-[#FBEFD9] flex items-center justify-center min-h-screen font-['Mali'] text-[#2A4750]">
-        <div className="flex items-center space-x-2 text-base font-bold animate-pulse">
-          <span>🐚</span>
-          <span>กำลังโหลด Ocean Chat...</span>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="page-shell">
       <div className="desk">
@@ -375,7 +354,7 @@ export default function MobileChatPage() {
                   <div className="bot-name">{selectedBot?.name || 'น้องพะยูน 🌊'}</div>
                   <div className="status-tag">
                     <span className="status-dot"></span>
-                    <span>{currentMood}</span>
+                    <span suppressHydrationWarning>{currentMood}</span>
                   </div>
                 </div>
               </div>
@@ -551,7 +530,7 @@ export default function MobileChatPage() {
             <form onSubmit={handleCreateCustomBot} className="flex-1 overflow-y-auto p-5 space-y-4 text-xs text-[#2A4750]">
               {/* Avatar Selector */}
               <div>
-                <label className="block font-[#Mali] font-bold text-sm text-[#2A4750] mb-1.5">ไอคอนตัวละคร (Avatar)</label>
+                <label className="block font-['Mali'] font-bold text-sm text-[#2A4750] mb-1.5">ไอคอนตัวละคร (Avatar)</label>
                 <div className="flex flex-wrap gap-2 mb-2">
                   {AVATAR_PRESETS.map((emoji) => (
                     <button
@@ -628,7 +607,7 @@ export default function MobileChatPage() {
                   placeholder="เช่น ไม่พูดจารุนแรง สุภาพอ่อนโยน"
                   value={newBotBoundaries}
                   onChange={(e) => setNewBotBoundaries(e.target.value)}
-                  className="w-full bg-white border-2 border-[#2A4750] rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-[#146C8C]/30"
+                  className="w-full bg-[#white] border-2 border-[#2A4750] rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-[#146C8C]/30"
                 />
               </div>
 
