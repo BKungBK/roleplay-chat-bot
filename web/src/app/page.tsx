@@ -14,28 +14,17 @@ interface Bot {
   name: string;
   avatar_url?: string;
   personality: string;
+  system_prompt?: string;
 }
 
-export default function MobileChatPage() {
-  const [bots, setBots] = useState<Bot[]>([
-    {
-      id: 'demo-bot-1',
-      name: 'น้องพะยูน ปลาน้อยจิตใจดี 🌊',
-      avatar_url: '🐬',
-      personality: 'เพื่อนสนิทที่คอยฟังและให้กำลังใจอย่างนุ่มนวล ชอบฟังเรื่องราวทะเลยามเช้า',
-    },
-    {
-      id: 'demo-bot-2',
-      name: 'เจ้าชายนกนางนวล 🪶',
-      avatar_url: '🦤',
-      personality: 'ชวนคุยเก่ง ช่างสังเกต อารมณ์ดี ชอบเล่าเรื่องการเดินทางริมชายหาด',
-    },
-  ]);
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
-  const [selectedBot, setSelectedBot] = useState<Bot>(bots[0]);
+export default function MobileChatPage() {
+  const [bots, setBots] = useState<Bot[]>([]);
+  const [selectedBot, setSelectedBot] = useState<Bot | null>(null);
   const [messages, setMessages] = useState<Message[]>([
     {
-      id: 'msg-1',
+      id: 'welcome-msg',
       sender_type: 'bot',
       content: 'สวัสดีวันสบายๆ ยามเช้ากลางทะเลนะคะ~ วันนี้มีเรื่องอะไรอยากเล่าให้ฟังหรือเปล่าเอ่ย? 🐚✨',
       created_at: new Date().toISOString(),
@@ -46,13 +35,40 @@ export default function MobileChatPage() {
   const [modelUsed, setModelUsed] = useState<string>('gemini-2.5-flash-lite');
   const chatEndRef = useRef<HTMLDivElement>(null);
 
+  // Fetch Bots from Backend Server
+  useEffect(() => {
+    async function loadBots() {
+      try {
+        const res = await fetch(`${API_BASE}/api/bots`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.bots && data.bots.length > 0) {
+            setBots(data.bots);
+            setSelectedBot(data.bots[0]);
+          }
+        }
+      } catch (err) {
+        console.warn('Backend API offline, using fallback bot data:', err);
+        const fallbackBot: Bot = {
+          id: 'bbedc638-844b-4af3-87ef-24290fcfa735',
+          name: 'น้องพะยูน ปลาน้อยจิตใจดี 🌊',
+          avatar_url: '🐬',
+          personality: 'เพื่อนสนิทที่คอยฟังและให้กำลังใจอย่างนุ่มนวล ชอบฟังเรื่องราวทะเลยามเช้า',
+        };
+        setBots([fallbackBot]);
+        setSelectedBot(fallbackBot);
+      }
+    }
+    loadBots();
+  }, []);
+
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
 
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!inputMessage.trim() || isLoading) return;
+    if (!inputMessage.trim() || isLoading || !selectedBot) return;
 
     const userText = inputMessage.trim();
     const userMsg: Message = {
@@ -67,12 +83,12 @@ export default function MobileChatPage() {
     setIsLoading(true);
 
     try {
-      // Call Elysia API Service
-      const res = await fetch('http://localhost:3001/api/chat', {
+      // Call Live Elysia + Gemini Server
+      const res = await fetch(`${API_BASE}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          chatId: 'demo-chat-session',
+          chatId: 'active-user-session',
           botId: selectedBot.id,
           message: userText,
         }),
@@ -82,9 +98,11 @@ export default function MobileChatPage() {
 
       const data = await res.json();
       setMessages((prev) => [...prev, data.message]);
-      setModelUsed(data.model_used || 'gemini-2.5-flash-lite');
+      if (data.model_used) {
+        setModelUsed(data.model_used);
+      }
     } catch {
-      // Demo Fallback for local testing preview
+      // Direct Fallback Preview
       setTimeout(() => {
         const botReply: Message = {
           id: `bot-${Date.now()}`,
@@ -107,11 +125,11 @@ export default function MobileChatPage() {
       <header className="ocean-wave-header px-4 pt-4 pb-3 flex items-center justify-between z-10 rounded-b-3xl">
         <div className="flex items-center space-x-3">
           <div className="w-11 h-11 rounded-2xl bg-white/90 border-2 border-sky-200 flex items-center justify-center text-2xl shadow-sm">
-            {selectedBot.avatar_url || '🌊'}
+            {selectedBot?.avatar_url || '🌊'}
           </div>
           <div>
             <h1 className="font-['Mali'] text-base font-bold text-sky-900 leading-tight">
-              {selectedBot.name}
+              {selectedBot?.name || 'น้องพะยูน 🌊'}
             </h1>
             <div className="flex items-center space-x-1.5 mt-0.5">
               <span className="w-2 h-2 rounded-full bg-teal-400 animate-pulse"></span>
@@ -121,21 +139,23 @@ export default function MobileChatPage() {
         </div>
 
         {/* Bot Persona Quick Switcher */}
-        <select
-          aria-label="เลือกตัวละครบอท"
-          className="bg-white/80 border border-sky-200 text-sky-900 text-xs rounded-xl px-2.5 py-1.5 font-medium outline-none focus:ring-2 focus:ring-sky-400 cursor-pointer"
-          value={selectedBot.id}
-          onChange={(e) => {
-            const found = bots.find((b) => b.id === e.target.value);
-            if (found) setSelectedBot(found);
-          }}
-        >
-          {bots.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.name}
-            </option>
-          ))}
-        </select>
+        {bots.length > 0 && (
+          <select
+            aria-label="เลือกตัวละครบอท"
+            className="bg-white/80 border border-sky-200 text-sky-900 text-xs rounded-xl px-2.5 py-1.5 font-medium outline-none focus:ring-2 focus:ring-sky-400 cursor-pointer"
+            value={selectedBot?.id || ''}
+            onChange={(e) => {
+              const found = bots.find((b) => b.id === e.target.value);
+              if (found) setSelectedBot(found);
+            }}
+          >
+            {bots.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
+          </select>
+        )}
       </header>
 
       {/* Model Cascade Badge */}
