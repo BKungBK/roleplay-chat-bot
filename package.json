@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "concurrently --names \"SERVER,WEB\" -c \"bgMagenta.bold,bgCyan.bold\" \"npm --prefix server run dev\" \"npm --prefix web run dev\"",
+    "dev": "npx concurrently --names \"SERVER,WEB\" -c \"bgMagenta.bold,bgCyan.bold\" \"npm --prefix server run dev\" \"npm --prefix web run dev\"",
     "dev:server": "cd server && bun run src/index.ts",
     "dev:web": "cd web && npm run dev"
   },
