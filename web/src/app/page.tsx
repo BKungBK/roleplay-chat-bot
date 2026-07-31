@@ -29,6 +29,13 @@ const AVATAR_PRESETS = [
   '🦭', '🐬', '🪼', '💖', '🌸', '✨', '🦊', '🐱', '☕', '🎨'
 ];
 
+const FALLBACK_BOT: Bot = {
+  id: 'bbedc638-844b-4af3-87ef-24290fcfa735',
+  name: 'น้องพะยูน 🌊',
+  avatar_url: '🦭',
+  personality: 'เพื่อนสนิทที่คอยฟังและให้กำลังใจอย่างนุ่มนวล ชอบฟังเรื่องราวทะเลยามเช้า',
+};
+
 function formatThaiTime(dateStr?: string): string {
   if (!dateStr) return '';
   const d = new Date(dateStr);
@@ -54,6 +61,7 @@ export default function MobileChatPage() {
   const [selectedBot, setSelectedBot] = useState<Bot | null>(null);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [authToken, setAuthToken] = useState<string | null>(null);
+  const initializedBotIdRef = useRef<string | null>(null);
 
   // Dynamic Relationship & Mood State
   const [relationshipScore, setRelationshipScore] = useState<number>(50);
@@ -74,12 +82,17 @@ export default function MobileChatPage() {
   const [newBotTemp, setNewBotTemp] = useState(0.7);
   const [isCreatingBot, setIsCreatingBot] = useState(false);
 
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 'welcome-msg',
       sender_type: 'bot',
       content: 'สวัสดีวันสบายๆ ยามเช้ากลางทะเลนะคะ~ วันนี้มีเรื่องอะไรอยากเล่าให้ฟังหรือเปล่าเอ่ย? 🐚✨',
-      created_at: new Date().toISOString(),
+      created_at: '2026-01-01T08:00:00.000Z',
     },
   ]);
   const [inputMessage, setInputMessage] = useState('');
@@ -114,17 +127,13 @@ export default function MobileChatPage() {
             setBots(data.bots);
             setSelectedBot(data.bots[0]);
           }
+        } else {
+          throw new Error('API response not ok');
         }
       } catch (err) {
         console.warn('Backend API offline, using fallback bot data:', err);
-        const fallbackBot: Bot = {
-          id: 'bbedc638-844b-4af3-87ef-24290fcfa735',
-          name: 'น้องพะยูน 🌊',
-          avatar_url: '🦭',
-          personality: 'เพื่อนสนิทที่คอยฟังและให้กำลังใจอย่างนุ่มนวล ชอบฟังเรื่องราวทะเลยามเช้า',
-        };
-        setBots([fallbackBot]);
-        setSelectedBot(fallbackBot);
+        setBots([FALLBACK_BOT]);
+        setSelectedBot(FALLBACK_BOT);
       }
     }
     loadBots();
@@ -133,7 +142,9 @@ export default function MobileChatPage() {
   // 3. Create Real Chat Session when Selected Bot changes
   useEffect(() => {
     async function createOrInitChat() {
-      if (!selectedBot || !authToken) return;
+      if (!selectedBot?.id || !authToken) return;
+      if (initializedBotIdRef.current === selectedBot.id) return;
+      initializedBotIdRef.current = selectedBot.id;
 
       try {
         const res = await fetch(`${API_BASE}/api/chats`, {
@@ -153,7 +164,7 @@ export default function MobileChatPage() {
             setCurrentMood(data.chat?.current_mood || 'พร้อมฟังเสมอ');
             setMessages([
               {
-                id: `welcome-${Date.now()}`,
+                id: `welcome-${selectedBot.id}`,
                 sender_type: 'bot',
                 content: `สวัสดีค่ะ! คุณกำลังคุยกับ ${selectedBot.name} อยู่ในขณะนี้นะคะ 🐚✨`,
                 created_at: new Date().toISOString(),
@@ -167,11 +178,15 @@ export default function MobileChatPage() {
     }
 
     createOrInitChat();
-  }, [selectedBot, authToken]);
+  }, [selectedBot?.id, authToken]);
 
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isLoading]);
+    if (!isMounted) return;
+    const timer = setTimeout(() => {
+      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [messages.length, isLoading]);
 
   // Helper to ensure chat session exists before sending
   const getOrCreateChatId = async (): Promise<string | null> => {
@@ -457,8 +472,8 @@ export default function MobileChatPage() {
 
                   {msg.content}
                 </div>
-                <div className="msg-time">
-                  {formatThaiTime(msg.created_at)}
+                <div className="msg-time" suppressHydrationWarning>
+                  {isMounted ? formatThaiTime(msg.created_at) : formatThaiTime(msg.created_at)}
                 </div>
               </div>
             ))}
