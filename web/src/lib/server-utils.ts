@@ -91,7 +91,10 @@ export async function getEmbeddingWithTimeout(text: string, timeoutMs: number = 
     const embedPromise = ai.models.embedContent({
       model: EMBEDDING_MODEL,
       contents: text
-    }).then(res => (res.embedding?.values as number[]) || null);
+    }).then(res => {
+      const r = res as any;
+      return (r.embedding?.values || r.embeddings?.[0]?.values) as number[] || null;
+    });
 
     const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs));
 
